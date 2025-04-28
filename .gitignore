@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# bookings data file
+bookings.csv
+*.csv
+
+# Environments
+.env
+.venv
+env/
+venv/

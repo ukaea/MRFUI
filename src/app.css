@@ -1,3 +1,4 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin "daisyui";
+@source "../node_modules/@sjsf/daisyui5-theme/dist";

@@ -13,10 +13,12 @@
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^6.0.0",
+		"@sveltejs/adapter-node": "^5.2.13",
 		"@sveltejs/kit": "^2.16.0",
 		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"@tailwindcss/forms": "^0.5.9",
 		"@tailwindcss/vite": "^4.1.11",
+		"@types/node": "^24.0.13",
 		"svelte": "^5.0.0",
 		"svelte-check": "^4.0.0",
 		"tailwindcss": "^4.1.11",
@@ -24,6 +26,11 @@
 		"vite": "^6.2.6"
 	},
 	"dependencies": {
-		"daisyui": "^5.0.46"
+		"@sjsf/ajv8-validator": "^2.1.1",
+		"@sjsf/daisyui5-theme": "^2.1.1",
+		"@sjsf/form": "^2.1.1",
+		"ajv": "8",
+		"daisyui": "^5.0.46",
+		"dotenv": "^17.2.0"
 	}
 }

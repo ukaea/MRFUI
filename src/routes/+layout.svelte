@@ -77,12 +77,6 @@
 					</ul>
 				{/if}
 			</div>
-			<button
-				class="btn btn-ghost text-lg font-semibold"
-				onclick={() => navigate("/")}
-			>
-				MRF Booking Data
-			</button>
 		</div>
 	</div>
 

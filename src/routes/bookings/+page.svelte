@@ -1,452 +1,599 @@
-<!-- src/routes/bookings/+page.svelte -->
 <script lang="ts">
-  import { createForm, BasicForm, type Schema } from "@sjsf/form";
-  import { resolver } from "@sjsf/form/resolvers/basic";
-  import { translation } from "@sjsf/form/translations/en";
-  import { theme } from "@sjsf/basic-theme";
-  import { createFormValidator } from "@sjsf/ajv8-validator";
-  import { onMount } from "svelte";
-  import { getJsonFiles, getJsonContent } from "$lib/jsonUtils";
+    import { BasicForm, createForm, type Schema } from "@sjsf/form";
+    import * as defaults from "$lib/form-defaults";
+    import { onMount } from "svelte";
+    import { getJsonContent, getJsonFiles } from "$lib/jsonUtils";
+    import type { FromSchema, JSONSchema } from "json-schema-to-ts";
 
-  interface User {
-    firstName: string;
-    lastName: string;
-    email: string;
-  }
+    // interface User {
+    //     firstName?: string;
+    //     lastName?: string;
+    //     email?: string;
+    // }
 
-  interface Booking {
-    labLocation: string;
-    seid: string;
-    jobId?: string;
-    sessionId?: string;
-    sampleId?: string;
-    bookingStart: string | Date;
-    bookingEnd: string | Date;
-    internalUser?: User;
-    externalUser?: User;
-    institution?: string;
-    scientificSupport?: User;
-    notes?: string;
-    workCategory:
-      | "User"
-      | "Engineering"
-      | "Mainenance"
-      | "Environment"
-      | "Repair";
-    sampleSplit: boolean;
-    splitSampleId?: string;
-    tritium: boolean;
-    beryllium: boolean;
-    betaGamma: boolean;
-  }
+    // type WorkCategory =
+    //     | "User"
+    //     | "Engineering"
+    //     | "Mainenance"
+    //     | "Environment"
+    //     | "Repair";
 
-  class BookingMetadata {
-    labLocation: string = "MRF";
-    seid: string = "";
-    jobId?: string;
-    sessionId?: string;
-    sampleId?: string;
-    bookingStart: Date | string = "";
-    bookingEnd: Date | string = "";
-    internalUser?: User;
-    externalUser?: User;
-    institution?: string;
-    scientificSupport?: User;
-    notes?: string;
-    workCategory:
-      | "User"
-      | "Engineering"
-      | "Mainenance"
-      | "Environment"
-      | "Repair" = "User";
-    sampleSplit: boolean = false;
-    splitSampleId?: string;
-    tritium: boolean = false;
-    beryllium: boolean = false;
-    betaGamma: boolean = false;
-  }
+    // interface MRFExperiment {
+    //     seid: string;
+    //     bookingStart: string;
+    //     bookingEnd: string;
+    //     workCategory: WorkCategory;
+    //     sampleSplit: boolean;
+    //     tritium: boolean;
+    //     beryllium: boolean;
+    //     betaGamma: boolean;
 
-  // API functions for file operations
-  async function saveJsonContent(filepath: string, data: any): Promise<void> {
-    const response = await fetch(`/api/save-json`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        filename: filepath,
-        data: data,
-      }),
-    });
-    if (!response.ok) throw new Error(`Failed to save file: ${filepath}`);
+    //     // Optional fields
+    //     labLocation?: string;
+    //     jobId?: string;
+    //     sessionId?: string;
+    //     sampleId?: string;
+    //     internalUser?: User;
+    //     externalUser?: User;
+    //     institution?: string;
+    //     scientificSupport?: User;
+    //     notes?: string;
+    //     splitSampleId?: string;
+    // }
 
-    const result = await response.json();
-    if (!result.success) {
-      throw new Error(result.message || `Failed to save file: ${filepath}`);
-    }
-  }
+    // // Form data type (excludes the id field)
+    // type MRFFormData = Omit<MRFExperiment, "id">;
 
-  function mapJSONToBooking(apiResponse: any): BookingMetadata {
-    const metadata = new BookingMetadata();
-    const mapped = Object.assign(metadata, apiResponse);
+    // const WORK_CATEGORIES: readonly WorkCategory[] = [
+    //     "User",
+    //     "Engineering",
+    //     "Mainenance",
+    //     "Environment",
+    //     "Repair",
+    // ] as const;
 
-    // Convert date strings to Date objects
-    if (mapped.bookingStart) {
-      mapped.bookingStart = new Date(mapped.bookingStart);
-    }
-    if (mapped.bookingEnd) {
-      mapped.bookingEnd = new Date(mapped.bookingEnd);
-    }
+    const mrfSchema = {} as const;
 
-    return mapped;
-  }
+    let allData = $state<FromSchema<typeof mrfSchema>[]>([]);
+    let selectedData = $state<FromSchema<typeof mrfSchema> | null>(null);
+    let showModal = $state<boolean>(false);
+    let value = $state<Partial<FromSchema<typeof mrfSchema>>>({});
 
-  function mapBookingToJSON(metadata: BookingMetadata): any {
-    return { ...metadata };
-  }
+    type User = FromSchema<typeof mrfSchema.properties.internalUser>;
 
-  let bookings: BookingMetadata[] = [];
-  let sortedData: BookingMetadata[] = [];
-  let loading = true;
-  let error: string | null = null;
-
-  function getStatusBadge(booking: Booking): string {
-    const now = new Date();
-    const start = new Date(booking.bookingStart);
-    const end = new Date(booking.bookingEnd);
-
-    if (now < start) {
-      return "badge-warning";
-    } else if (now > end) {
-      return "badge-neutral";
-    } else {
-      return "badge-success";
-    }
-  }
-
-  function getStatus(booking: Booking): string {
-    const now = new Date();
-    const start = new Date(booking.bookingStart);
-    const end = new Date(booking.bookingEnd);
-
-    if (now < start) {
-      return "upcoming";
-    } else if (now > end) {
-      return "completed";
-    } else {
-      return "active";
-    }
-  }
-
-  function formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }
-
-  function formatDateTime(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }
-
-  function getUserName(booking: Booking): string {
-    if (booking.internalUser) {
-      return `${booking.internalUser.firstName} ${booking.internalUser.lastName}`;
-    } else if (booking.externalUser) {
-      return `${booking.externalUser.firstName} ${booking.externalUser.lastName}`;
-    }
-    return "Unknown";
-  }
-
-  function getHazardBadges(booking: Booking): string[] {
-    const hazards = [];
-    if (booking.tritium) hazards.push("Tritium");
-    if (booking.beryllium) hazards.push("Beryllium");
-    if (booking.betaGamma) hazards.push("β/γ");
-    return hazards;
-  }
-
-  let selectedBooking: BookingMetadata | null = null;
-  let editingBooking: BookingMetadata | null = null;
-  let mrfSchema: Schema | null = null;
-  let editForm: any = null;
-
-  const validator = createFormValidator();
-
-  // Load bookings from file system
-  async function loadBookings() {
-    try {
-      loading = true;
-      error = null;
-      const files = await getJsonFiles("bookings");
-      const data = await Promise.all(
-        files.map((filename: string) => getJsonContent("bookings/" + filename)),
-      );
-      sortedData = data.map(mapJSONToBooking).sort((a, b) => {
-        // Sort by booking start date
-        const dateA = new Date(a.bookingStart);
-        const dateB = new Date(b.bookingStart);
-        return dateB.getTime() - dateA.getTime();
-      });
-      bookings = [...sortedData];
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to load bookings";
-      console.error("Error loading bookings:", err);
-    } finally {
-      loading = false;
-    }
-  }
-
-  // Save booking to file system
-  async function saveBooking(booking: BookingMetadata) {
-    try {
-      const filename = `bookings/booking-${booking.seid}.json`;
-      const jsonData = mapBookingToJSON(booking);
-      await saveJsonContent(filename, jsonData);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to save booking";
-      console.error("Error saving booking:", err);
-      throw err;
-    }
-  }
-
-  onMount(async () => {
-    try {
-      const schemaData = await getJsonContent("schemas/mrf_schema.json");
-      mrfSchema = schemaData;
-      console.log("MRF Schema loaded:", mrfSchema);
-    } catch (error) {
-      console.error("Failed to fetch MRF schema:", error);
-    }
-
-    // Load bookings from file system
-    await loadBookings();
-    console.log("Bookings loaded:", bookings);
-  });
-
-  function selectBooking(booking: BookingMetadata) {
-    selectedBooking = booking;
-    editingBooking = { ...booking }; // Create a copy for editing
-
-    // Create the form with the fetched schema
-    if (mrfSchema) {
-      editForm = createForm({
-        theme,
+    const form = createForm({
+        ...defaults,
         schema: mrfSchema,
-        resolver,
-        validator,
-        translation,
-        onSubmit: async (data) => {
-          if (selectedBooking) {
-            try {
-              const updatedBooking = mapJSONToBooking(data);
+        value: [() => value, (v: Partial<FromSchema<typeof mrfSchema>>) => (value = v)],
+    });
 
-              // Save to file system
-              await saveBooking(updatedBooking);
-
-              // Update local state
-              const index = bookings.findIndex(
-                (b) => b.seid === selectedBooking.seid,
-              );
-              if (index !== -1) {
-                bookings[index] = updatedBooking;
-                bookings = [...bookings]; // Trigger reactivity
-              }
-
-              selectedBooking = null;
-              editingBooking = null;
-              editForm = null;
-            } catch (err) {
-              console.error("Failed to save booking:", err);
-              // You might want to show an error message to the user
-            }
-          }
-        },
-      });
-
-      // Convert dates to ISO strings for the form
-      const formData = { ...editingBooking };
-      if (formData.bookingStart instanceof Date) {
-        formData.bookingStart = formData.bookingStart
-          .toISOString()
-          .slice(0, 16);
-      }
-      if (formData.bookingEnd instanceof Date) {
-        formData.bookingEnd = formData.bookingEnd.toISOString().slice(0, 16);
-      }
-
-      // Set initial data
-      editForm.setData(formData);
+    function openModal(data: FromSchema<typeof mrfSchema>): void {
+        selectedData = data;
+        value = data;  
+        showModal = true;
     }
-  }
 
-  function cancelEdit() {
-    selectedBooking = null;
-    editingBooking = null;
-    editForm = null;
-  }
+    function closeModal(): void {
+        showModal = false;
+        selectedData = null;
+        value = {};
+    }
+
+    function handleFormSubmit(formData: FromSchema<typeof mrfSchema>): void {
+        console.log("Form submitted:", formData);
+        closeModal();
+    }
+
+    // function formatDate(dateString: string): string {
+    //     const date = new Date(dateString);
+    //     return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    // }
+
+    function formatUser(user: User | undefined): string {
+        return user ? `${user.firstName} ${user.lastName}` : "N/A";
+    }
+
+    function formatBoolean(value: boolean): string {
+        return value ? "Yes" : "No";
+    }
+
+    async function loadMrfSchema() {
+        try {
+            const schemaFiles = await getJsonFiles("schemas");
+            if (schemaFiles.length === 0) {
+                console.warn("No JSON files found in the schemas directory.");
+                return;
+            }
+
+            for (const file of schemaFiles) {
+                console.log(`Processing schema file: ${file}`);
+
+                const schema = await getJsonContent(`schemas/${file}`);
+
+                console.log("Found MRF Experiment Metadata schema");
+
+                Object.assign(mrfSchema, schema);
+                console.log(
+                    "Successfully loaded MRF schema with properties:",
+                    Object.keys(mrfSchema),
+                );
+                return true;
+            }
+
+            console.warn(
+                "MRF Experiment Metadata schema not found in provided files",
+            );
+            return false;
+        } catch (error) {
+            console.error("Error loading MRF schema:", error);
+            throw error;
+        }
+    }
+
+    async function loadMRFData()
+    {
+        try {
+            const dataFiles = await getJsonFiles("bookings");
+            if (dataFiles.length === 0) {
+                console.warn("No JSON files found in the bookings directory.");
+                return;
+            }
+
+            for (const file of dataFiles) {
+                const data = await getJsonContent(`bookings/${file}`);
+                allData.push(data);
+            }
+        } catch (error) {
+            console.error("Error loading MRF data:", error);
+        }
+    }
+
+    onMount(async () => {
+        await loadMrfSchema();
+        await loadMRFData();
+    });
 </script>
 
-<svelte:head>
-  <title>Bookings - MRF Booking Data</title>
-</svelte:head>
-
-<div class="mb-6">
-  <h1 class="text-2xl font-bold text-base-content mb-2">
-    MRF Equipment Bookings
-  </h1>
+<div class="container">
+    <div class="table-wrapper">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SEID</th>
+                        <th>Job ID</th>
+                        <th>Sample ID</th>
+                        <!-- <th>Booking Start</th> -->
+                        <th>Work Category</th>
+                        <th>Internal User</th>
+                        <th>External User</th>
+                        <th>Institution</th>
+                        <th class="actions-column">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each allData as item (item.sessionId)}
+                        <tr class="data-row" role="button" tabindex="0">
+                            <td class="seid-cell">{item.seid}</td>
+                            <td>{item.jobId}</td>
+                            <td class="sample-id">{item.sampleId}</td>
+                            <!-- <td class="date-cell">{formatDate(item.bookingStart)}</td> -->
+                            <td>
+                                <span class="category-badge category-{item.workCategory.toLowerCase()}">
+                                    {item.workCategory}
+                                </span>
+                            </td>
+                            <td>{formatUser(item.internalUser)}</td>
+                            <td>{formatUser(item.externalUser)}</td>
+                            <td class="institution-cell">{item.institution}</td>
+                            <td class="actions-cell">
+                                <button
+                                    class="btn"
+                                    onclick={() => openModal(item)}
+                                    aria-label="Edit experiment {item.seid}"
+                                >
+                                    Edit
+                                </button>
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-  <div class="stats shadow">
-    <div class="stat">
-      <div class="stat-title">Total Bookings</div>
-      <div class="stat-value text-2xl">{bookings.length}</div>
-      <div class="stat-desc">Active and completed sessions</div>
-    </div>
-  </div>
-
-  <div class="stats shadow">
-    <div class="stat">
-      <div class="stat-title">User Sessions</div>
-      <div class="stat-value text-2xl">
-        {bookings.filter((b) => b.workCategory === "User").length}
-      </div>
-      <div class="stat-desc">Research and analysis work</div>
-    </div>
-  </div>
-
-  <div class="stats shadow">
-    <div class="stat">
-      <div class="stat-title">Hazardous Materials</div>
-      <div class="stat-value text-2xl">
-        {bookings.filter((b) => b.tritium || b.beryllium || b.betaGamma).length}
-      </div>
-      <div class="stat-desc">Sessions with radiological hazards</div>
-    </div>
-  </div>
-</div>
-
-<div class="overflow-x-auto">
-  <table class="table table-hover">
-    <thead>
-      <tr>
-        <th>SEID</th>
-        <th>Job ID</th>
-        <th>User</th>
-        <th>Institution</th>
-        <th>Start</th>
-        <th>End</th>
-        <th>Category</th>
-        <th>Status</th>
-        <th>Hazards</th>
-        <th>Sample Split</th>
-        <th>Notes</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each bookings as booking}
-        <tr
-          class="cursor-pointer hover:bg-base-200"
-          on:click={() => selectBooking(booking)}
-        >
-          <td class="font-mono text-sm">{booking.seid}</td>
-          <td class="font-mono text-sm">{booking.jobId || "-"}</td>
-          <td>
-            <div class="font-semibold">{getUserName(booking)}</div>
-            {#if booking.scientificSupport}
-              <div class="text-xs text-base-content/60">
-                Support: {booking.scientificSupport.firstName}
-                {booking.scientificSupport.lastName}
-              </div>
-            {/if}
-          </td>
-          <td
-            >{booking.institution || (booking.internalUser ? "UKAEA" : "-")}</td
-          >
-          <td class="text-sm">{formatDateTime(booking.bookingStart)}</td>
-          <td class="text-sm">{formatDateTime(booking.bookingEnd)}</td>
-          <td>
-            <span class="badge badge-outline badge-sm">
-              {booking.workCategory}
-            </span>
-          </td>
-          <td>
-            <span class="badge {getStatusBadge(booking)} badge-sm">
-              {getStatus(booking)}
-            </span>
-          </td>
-          <td>
-            <div class="flex gap-1 flex-wrap">
-              {#each getHazardBadges(booking) as hazard}
-                <span class="badge badge-error badge-xs">{hazard}</span>
-              {/each}
+{#if showModal}
+    <div
+        class="modal-overlay"
+        onclick={closeModal}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+    >
+        <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+            <div class="modal-header">
+                <h2 id="modal-title">Edit Experiment Data</h2>
+                <button
+                    class="close-btn"
+                    onclick={closeModal}
+                    aria-label="Close modal"
+                >
+                </button>
             </div>
-          </td>
-          <td>
-            {#if booking.sampleSplit}
-              <span class="badge badge-info badge-xs">Split</span>
-              {#if booking.splitSampleId}
-                <div class="text-xs font-mono text-base-content/60">
-                  {booking.splitSampleId}
-                </div>
-              {/if}
-            {:else}
-              <span class="text-base-content/40">-</span>
-            {/if}
-          </td>
-          <td class="max-w-xs">
-            <div
-              class="text-sm text-base-content/80 truncate"
-              title={booking.notes}
-            >
-              {booking.notes || "-"}
+            <div class="modal-body">
+                <BasicForm {form} onSubmit={handleFormSubmit} />
             </div>
-          </td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-</div>
-
-{#if selectedBooking && editForm && mrfSchema}
-  <div class="mt-6 p-6 bg-base-200 rounded-lg">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">
-        Edit Booking - {selectedBooking.seid}
-      </h2>
-      <button class="btn btn-sm btn-outline" on:click={cancelEdit}>✕</button>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick={closeModal}
+                    >Cancel</button
+                >
+                <button
+                    class="btn btn-primary"
+                    onclick={() => handleFormSubmit(value)}>Save Changes</button
+                >
+            </div>
+        </div>
     </div>
-
-    <div class="bg-white p-4 rounded">
-      <BasicForm form={editForm} />
-    </div>
-
-    <div class="flex gap-2 mt-4">
-      <button class="btn btn-outline" on:click={cancelEdit}>Cancel</button>
-    </div>
-  </div>
-{:else if selectedBooking && !mrfSchema}
-  <div class="mt-6 p-6 bg-base-200 rounded-lg">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">
-        Edit Booking - {selectedBooking.seid}
-      </h2>
-      <button class="btn btn-sm btn-outline" on:click={cancelEdit}>✕</button>
-    </div>
-
-    <div class="flex items-center justify-center p-8">
-      <div class="text-center">
-        <div class="loading loading-spinner loading-lg mb-4"></div>
-        <p class="text-base-content/70">Loading schema...</p>
-      </div>
-    </div>
-  </div>
 {/if}
+
+<style>
+    :global(body) {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
+        background-color: #f8fafc;
+        color: #1e293b;
+        line-height: 1.6;
+    }
+
+    .container {
+        padding: 2rem;
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .subtitle {
+        margin: 0;
+        color: #64748b;
+        font-size: 1.1rem;
+        font-weight: 400;
+    }
+
+    .table-wrapper {
+        background: white;
+        border-radius: 12px;
+        box-shadow:
+            0 4px 6px -1px rgba(0, 0, 0, 0.1),
+            0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+    }
+
+    .table-container {
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: white;
+    }
+
+    thead th {
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+        padding: 1rem 0.75rem;
+        text-align: left;
+        font-weight: 600;
+        color: #374151;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 2px solid #e2e8f0;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    tbody td {
+        padding: 1rem 0.75rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #374151;
+        vertical-align: middle;
+    }
+
+    .data-row {
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .data-row:hover {
+        background-color: #f8fafc;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    .data-row:focus {
+        outline: 2px solid #3b82f6;
+        outline-offset: -2px;
+    }
+
+    .seid-cell {
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .sample-id {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .date-cell {
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+
+    .category-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .category-user {
+        background-color: #dbeafe;
+        color: #1e40af;
+    }
+    .category-engineering {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+    .category-maintenance {
+        background-color: #fce7f3;
+        color: #be185d;
+    }
+    .category-environment {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+    .category-repair {
+        background-color: #fee2e2;
+        color: #991b1b;
+    }
+
+    .institution-cell {
+        font-style: italic;
+        color: #64748b;
+    }
+
+    .actions-column {
+        width: 120px;
+        text-align: center;
+    }
+
+    .actions-cell {
+        text-align: center;
+    }
+
+    .edit-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .edit-btn:hover {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+
+    .edit-btn:active {
+        transform: translateY(0);
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        opacity: 0;
+        animation: fadeIn 0.2s ease forwards;
+    }
+
+    @keyframes fadeIn {
+        to {
+            opacity: 1;
+        }
+    }
+
+    .modal-content {
+        background-color: white;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 900px;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        transform: scale(0.95) translateY(20px);
+        animation: slideIn 0.2s ease forwards;
+    }
+
+    @keyframes slideIn {
+        to {
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .close-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        background: none;
+        border: none;
+        border-radius: 8px;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .close-btn:hover {
+        background-color: #f1f5f9;
+        color: #374151;
+    }
+
+    .modal-body {
+        padding: 2rem;
+        overflow-y: auto;
+        max-height: calc(90vh - 200px);
+    }
+
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        padding: 1.5rem 2rem;
+        border-top: 1px solid #e2e8f0;
+        background-color: #f8fafc;
+    }
+
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .btn-secondary {
+        background-color: #f1f5f9;
+        color: #475569;
+    }
+
+    .btn-secondary:hover {
+        background-color: #e2e8f0;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+
+    :global(.modal-body input),
+    :global(.modal-body textarea),
+    :global(.modal-body select) {
+        background-color: white !important;
+        color: #1e293b !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 6px !important;
+        padding: 0.75rem !important;
+        font-size: 0.875rem !important;
+        transition: border-color 0.2s ease !important;
+    }
+
+    :global(.modal-body input:focus),
+    :global(.modal-body textarea:focus),
+    :global(.modal-body select:focus) {
+        outline: none !important;
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+
+    :global(.modal-body label) {
+        color: #374151 !important;
+        font-weight: 500 !important;
+        margin-bottom: 0.5rem !important;
+        display: block !important;
+    }
+
+    :global(.modal-body .form-group) {
+        margin-bottom: 1.5rem !important;
+    }
+
+    :global(.modal-body input[type="checkbox"]) {
+        width: auto !important;
+        margin-right: 0.5rem !important;
+    }
+
+    /* Responsive design */
+    @media (max-width: 1024px) {
+        .container {
+            padding: 1rem;
+        }
+
+        .modal-content {
+            width: 95%;
+        }
+
+        .modal-header,
+        .modal-body,
+        .modal-footer {
+            padding: 1rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        thead th,
+        tbody td {
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .edit-btn {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        .category-badge {
+            font-size: 0.625rem;
+            padding: 0.125rem 0.5rem;
+        }
+    }
+</style>

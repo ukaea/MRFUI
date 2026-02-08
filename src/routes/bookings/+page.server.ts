@@ -10,27 +10,40 @@ export const load: PageServerLoad = async ({ url }) => {
 		throw error(500, "MRF_BACKEND_URL is not configured");
 	}
 
+	const search = url.searchParams.get("search") || "";
 	const page = Number(url.searchParams.get("page")) || 1;
 	const pageSize = Number(url.searchParams.get("page_size")) || 10;
 
-	const response = await fetch(
-		`${backendUrl}/bookings?page=${page}&page_size=${pageSize}`,
-	);
+	let response: Response;
+
+	if (search) {
+		response = await fetch(
+			`${backendUrl}/bookings/search?key=jobId&value=${encodeURIComponent(search)}`,
+		);
+	} else {
+		response = await fetch(
+			`${backendUrl}/bookings?page=${page}&page_size=${pageSize}`,
+		);
+	}
+
 	if (!response.ok) {
 		throw error(response.status, "Failed to fetch bookings");
 	}
 
 	const result = await response.json();
-	const bookings: MRFSchema[] = result.items;
+	const bookings: MRFSchema[] = search ? result : result.items;
 
 	return {
 		bookings,
-		pagination: {
-			page,
-			pageSize,
-			total: result.total as number,
-			totalPages: result.total_pages as number,
-		},
+		search,
+		pagination: search
+			? { page: 1, pageSize: bookings.length || pageSize, total: bookings.length, totalPages: 1 }
+			: {
+					page,
+					pageSize,
+					total: result.total as number,
+					totalPages: result.total_pages as number,
+				},
 	};
 };
 

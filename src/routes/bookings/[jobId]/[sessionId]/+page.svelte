@@ -124,11 +124,11 @@
 				<div class="grid grid-cols-2 gap-4">
 					<div class="space-y-2">
 						<Label for="jobId">Job ID</Label>
-						<Input id="jobId" bind:value={form.jobId} placeholder="e.g. 25001" />
+						<Input id="jobId" value={form.jobId} disabled />
 					</div>
 					<div class="space-y-2">
 						<Label for="sessionId">Session ID</Label>
-						<Input id="sessionId" bind:value={form.sessionId} placeholder="e.g. SES-001" />
+						<Input id="sessionId" value={form.sessionId} disabled />
 					</div>
 					<div class="space-y-2">
 						<Label for="seid">SEID</Label>
@@ -364,7 +364,6 @@
 					<Input
 						id="institution"
 						bind:value={form.institution}
-						placeholder="e.g. TU Delft"
 					/>
 				</div>
 			</Card.Content>
@@ -406,7 +405,7 @@
 			</Card.Content>
 		</Card.Root>
 
-		<Card.Root class="md:col-span-2">
+		<Card.Root>
 			<Card.Header>
 				<Card.Title>Notes</Card.Title>
 			</Card.Header>

@@ -414,12 +414,12 @@
 				</Table.Root>
 			</DndContext>
 		</div>
-		<div class="flex items-center justify-between px-2 sm:px-4">
-			<div class="text-muted-foreground hidden flex-1 text-sm lg:flex">
+		<div class="flex flex-wrap items-center justify-between gap-2 px-2 sm:px-4">
+			<div class="text-muted-foreground flex-1 text-sm">
 				Showing {data.length} of {serverPagination.total} booking(s).
 			</div>
-			<div class="flex w-full items-center gap-8 lg:w-fit">
-				<div class="hidden items-center gap-2 lg:flex">
+			<div class="flex flex-wrap items-center gap-4">
+				<div class="flex items-center gap-2">
 					<Label for="rows-per-page" class="text-sm font-medium"
 						>Rows per page</Label
 					>
@@ -452,10 +452,11 @@
 					Page {table.getState().pagination.pageIndex + 1} of
 					{table.getPageCount()}
 				</div>
-				<div class="ml-auto flex items-center gap-2 lg:ml-0">
+				<div class="flex items-center gap-2">
 					<Button
 						variant="outline"
-						class="hidden h-8 w-8 p-0 lg:flex"
+						class="size-8"
+						size="icon"
 						onclick={() => table.setPageIndex(0)}
 						disabled={!table.getCanPreviousPage()}
 					>
@@ -484,7 +485,7 @@
 					</Button>
 					<Button
 						variant="outline"
-						class="hidden size-8 lg:flex"
+						class="size-8"
 						size="icon"
 						onclick={() =>
 							table.setPageIndex(table.getPageCount() - 1)}
@@ -565,11 +566,13 @@
 		}}
 	>
 		{#each row.getVisibleCells() as cell (cell.id)}
-			<Table.Cell>
-				<FlexRender
-					content={cell.column.columnDef.cell}
-					context={cell.getContext()}
-				/>
+			<Table.Cell class={cell.column.id === "drag" ? "" : "max-w-[200px]"}>
+				<div class={cell.column.id === "drag" ? "" : "truncate"}>
+					<FlexRender
+						content={cell.column.columnDef.cell}
+						context={cell.getContext()}
+					/>
+				</div>
 			</Table.Cell>
 		{/each}
 	</Table.Row>

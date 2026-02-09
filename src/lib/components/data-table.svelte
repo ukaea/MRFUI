@@ -152,7 +152,8 @@
 	let {
 		data,
 		serverPagination,
-	}: { data: MRFSchema[]; serverPagination: ServerPagination } = $props();
+		basePath = "/bookings",
+	}: { data: MRFSchema[]; serverPagination: ServerPagination; basePath?: string } = $props();
 	let pagination = $state<PaginationState>({
 		pageIndex: serverPagination.page - 1,
 		pageSize: serverPagination.pageSize,
@@ -178,7 +179,7 @@
 		const params = new URLSearchParams();
 		params.set("page", String(pageIndex + 1));
 		params.set("page_size", String(pageSize));
-		goto(`/bookings?${params.toString()}`);
+		goto(`${basePath}?${params.toString()}`);
 	}
 
 	const table = createSvelteTable({
@@ -556,7 +557,7 @@
 {#snippet DraggableRow({ row }: { row: Row<MRFSchema> })}
 	{@const sortable = useSortable({ id: row.original.bookingUUID })}
 	{@const hasDetailPage = !!row.original.bookingUUID}
-	{@const detailUrl = hasDetailPage ? `/bookings/${row.original.jobId}/${row.original.sessionId}?uuid=${row.original.bookingUUID}` : null}
+	{@const detailUrl = hasDetailPage ? `${basePath}/${row.original.jobId}/${row.original.sessionId}?uuid=${row.original.bookingUUID}` : null}
 	<Table.Row
 		data-state={row.getIsSelected() ? "selected" : undefined}
 		class={hasDetailPage ? "cursor-pointer hover:bg-muted/50" : ""}

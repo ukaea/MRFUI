@@ -10,6 +10,7 @@
 	import HelpIcon from "@tabler/icons-svelte/icons/help";
 	import InnerShadowTopIcon from "@tabler/icons-svelte/icons/inner-shadow-top";
 	import ListDetailsIcon from "@tabler/icons-svelte/icons/list-details";
+	import ShieldIcon from "@tabler/icons-svelte/icons/shield";
 	import ReportIcon from "@tabler/icons-svelte/icons/report";
 	import SearchIcon from "@tabler/icons-svelte/icons/search";
 	import SettingsIcon from "@tabler/icons-svelte/icons/settings";
@@ -36,6 +37,11 @@
 				title: "Bookings",
 				url: "/bookings",
 				icon: ListDetailsIcon,
+			},
+			{
+				title: "Admin",
+				url: "/admin",
+				icon: ShieldIcon,
 			},
 		],
 		navSecondary: [

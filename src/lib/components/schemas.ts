@@ -29,7 +29,7 @@ export const MRFSchema = z.object({
 	beryllium: z.boolean(),
 	betaGamma: z.boolean(),
 	modified: z.string().optional(),
-	stage: z.string().optional(),
+	stage: z.enum(["Initial", "Data Export", "Ingest"]).default("Initial"),
 });
 
 export type MRFSchema = z.infer<typeof MRFSchema>;

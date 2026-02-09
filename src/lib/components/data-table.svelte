@@ -25,7 +25,7 @@
 		},
 		{
 			accessorKey: "seidDescription",
-			header: "SEID Description",
+			header: ({ column }) => renderSnippet(SortableHeader, { label: "SEID Description", column }),
 			cell: ({ row }) => row.original.seidDescription || "—",
 		},
 		{
@@ -57,7 +57,14 @@
 		},
 		{
 			id: "scientificSupport",
-			header: "Scientific Support",
+			accessorFn: (row) => {
+				const support = row.scientificSupport;
+				if (!support) return "";
+				const user = Array.isArray(support) ? support[0] : support;
+				if (!user) return "";
+				return [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
+			},
+			header: ({ column }) => renderSnippet(SortableHeader, { label: "Scientific Support", column }),
 			cell: ({ row }) => {
 				const support = row.original.scientificSupport;
 				if (!support) return "—";
@@ -68,13 +75,13 @@
 		},
 		{
 			accessorKey: "institution",
-			header: "Institution",
+			header: ({ column }) => renderSnippet(SortableHeader, { label: "Institution", column }),
 			cell: ({ row }) => row.original.institution || "—",
 		},
 		{
-			accessorKey: "status",
-			header: "Status",
-			cell: ({ row }) => row.original.status,
+			accessorKey: "stage",
+			header: ({ column }) => renderSnippet(SortableHeader, { label: "Stage", column }),
+			cell: ({ row }) => row.original.stage || "Initial",
 		},
 	];
 </script>
@@ -297,7 +304,7 @@
 				sampleId: false,
 				bookingStart: false,
 				bookingEnd: false,
-				status: true,
+				stage: true,
 				scientificSupport: false,
 				institution: false,
 			};
@@ -312,7 +319,7 @@
 				sampleId: false,
 				bookingStart: true,
 				bookingEnd: true,
-				status: true,
+				stage: true,
 				scientificSupport: false,
 				institution: false,
 			};
@@ -327,7 +334,7 @@
 				sampleId: true,
 				bookingStart: true,
 				bookingEnd: true,
-				status: true,
+				stage: true,
 				scientificSupport: false,
 				institution: false,
 			};

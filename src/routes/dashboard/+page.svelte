@@ -1,6 +1,7 @@
 <script lang="ts">
   import SectionCards from "$lib/components/section-cards.svelte";
 
+  // Using Svelte 5 $props rune
   let { data } = $props();
 </script>
 

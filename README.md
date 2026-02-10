@@ -1,38 +1,51 @@
-# sv
+# MRF UI
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Web frontend for the Materials Research Facility (MRF) booking management system
 
-## Creating a project
+## Prerequisites
 
-If you're seeing this, you've probably already done this step. Congrats!
+- Node.js 24+
+- A running [MRF backend](https://github.com/ukaea/MRFBackend) API
 
-```bash
-# create a new project in the current directory
-npx sv create
+## Environment Variables
 
-# create a new project in my-app
-npx sv create my-app
+Create a `.env` file in the project root:
+
+```
+MRF_BACKEND_URL=http://localhost:9000
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Local Development
 
 ```bash
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+The dev server starts at `http://localhost:5173`.
 
-To create a production version of your app:
+### Other Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run build` | Production build (output in `./build`) |
+| `npm run preview` | Preview the production build locally |
+| `npm run start` | Start the production server (`node build`) |
+| `npm run check` | Run `svelte-check` for type diagnostics |
+
+## Docker
+
+### Build and run with Docker Compose
 
 ```bash
-npm run build
+docker compose up --build
 ```
 
-You can preview the production build with `npm run preview`.
+The app will be available at `http://localhost:3000`.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+### Build the image manually
+
+```bash
+docker build -t mrf-ui .
+docker run -p 3000:3000 --env-file .env -e NODE_ENV=production -e ORIGIN=http://localhost:3000 mrf-ui
+```

@@ -1,6 +1,7 @@
 import { error, fail } from "@sveltejs/kit";
 import type { PageServerLoad, Actions } from "./$types";
-import type { MRFSchema } from "$lib/components/schemas";
+import { MRFSchema } from "$lib/components/schemas";
+import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -19,7 +20,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		throw error(response.status, `Booking not found: ${uuid}`);
 	}
 
-	const booking: MRFSchema = await response.json();
+	const booking: MRFSchemaType = await response.json();
 
 	return { booking };
 };
@@ -39,12 +40,20 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const payload = JSON.parse(formData.get("payload") as string);
 
+		const result = MRFSchema.safeParse(payload);
+		if (!result.success) {
+			const messages = result.error.issues.map(
+				(i) => `${i.path.join(".")}: ${i.message}`
+			);
+			return fail(400, { error: `Validation failed: ${messages.join(", ")}` });
+		}
+
 		const response = await fetch(
 			`${backendUrl}/bookings/${uuid}`,
 			{
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
+				body: JSON.stringify(result.data),
 			},
 		);
 

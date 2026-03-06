@@ -15,12 +15,15 @@
 	import PlusIcon from "@tabler/icons-svelte/icons/plus";
 	import XIcon from "@tabler/icons-svelte/icons/x";
 	import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
-	import type { MRFSchema } from "$lib/components/schemas";
+	import LockIcon from "@tabler/icons-svelte/icons/lock";
+	import LockOpenIcon from "@tabler/icons-svelte/icons/lock-open";
+	import { MRFSchema } from "$lib/components/schemas";
+	import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
 
 	let { data } = $props();
 
 	// Create editable form state from the booking data
-	let form = $state<MRFSchema>({ ...data.booking });
+	let form = $state<MRFSchemaType>({ ...data.booking });
 
 	// Track if form has been modified
 	let isDirty = $derived(JSON.stringify(form) !== JSON.stringify(data.booking));
@@ -34,6 +37,27 @@
 
 	let currentStage = $derived<Stage>((form.stage as Stage) || "Initial");
 	let isFormEditable = $derived(currentStage === "Initial");
+
+	// Per-card lock states (locked by default)
+	type CardKey = 'bookingDetails' | 'schedule' | 'sampleInfo' | 'hazards' | 'internalUser' | 'externalUser' | 'scientificSupport' | 'notes';
+	let cardLocks = $state<Record<CardKey, boolean>>({
+		bookingDetails: true,
+		schedule: true,
+		sampleInfo: true,
+		hazards: true,
+		internalUser: true,
+		externalUser: true,
+		scientificSupport: true,
+		notes: true,
+	});
+
+	function toggleLock(card: CardKey) {
+		cardLocks[card] = !cardLocks[card];
+	}
+
+	function isCardDisabled(card: CardKey): boolean {
+		return !isFormEditable || cardLocks[card];
+	}
 
 	// Collapsible open states
 	let importedOpen = $state(true);
@@ -116,6 +140,29 @@
 	function handleCancel() {
 		form = { ...data.booking };
 		saveError = "";
+		fieldErrors = {};
+	}
+
+	// Validation
+	let fieldErrors = $state<Record<string, string>>({});
+
+	function validateForm(): boolean {
+		fieldErrors = {};
+		const payload = buildPayload();
+		const result = MRFSchema.safeParse(payload);
+		if (result.success) return true;
+
+		for (const issue of result.error.issues) {
+			const key = issue.path.join(".");
+			if (!fieldErrors[key]) {
+				fieldErrors[key] = issue.message;
+			}
+		}
+		return false;
+	}
+
+	function fieldError(path: string): string | undefined {
+		return fieldErrors[path];
 	}
 
 	function getStatusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -168,8 +215,17 @@
 		<Collapsible.Content class="border-t">
 			<div class="grid gap-6 md:grid-cols-2 p-6">
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Booking Details</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('bookingDetails')}>
+								{#if cardLocks.bookingDetails}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="grid grid-cols-2 gap-4">
@@ -183,19 +239,25 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="seid">SEID</Label>
-								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={!isFormEditable} />
+								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={isCardDisabled('bookingDetails')} />
+								{#if fieldError('seid')}
+									<p class="text-destructive text-xs">{fieldError('seid')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="seidDescription">SEID Description</Label>
-								<Input id="seidDescription" bind:value={form.seidDescription} placeholder="Equipment name" disabled={!isFormEditable} />
+								<Input id="seidDescription" bind:value={form.seidDescription} placeholder="Equipment name" disabled={isCardDisabled('bookingDetails')} />
 							</div>
 							<div class="space-y-2">
 								<Label for="labLocation">Lab Location</Label>
-								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={!isFormEditable} />
+								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={isCardDisabled('bookingDetails')} />
+								{#if fieldError('labLocation')}
+									<p class="text-destructive text-xs">{fieldError('labLocation')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="workCategory">Work Category</Label>
-								<Select.Root type="single" bind:value={form.workCategory} disabled={!isFormEditable}>
+								<Select.Root type="single" bind:value={form.workCategory} disabled={isCardDisabled('bookingDetails')}>
 									<Select.Trigger id="workCategory" class="w-full">
 										{form.workCategory}
 									</Select.Trigger>
@@ -207,10 +269,13 @@
 										<Select.Item value="Repair">Repair</Select.Item>
 									</Select.Content>
 								</Select.Root>
+								{#if fieldError('workCategory')}
+									<p class="text-destructive text-xs">{fieldError('workCategory')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="status">Status</Label>
-								<Select.Root type="single" bind:value={form.status} disabled={!isFormEditable}>
+								<Select.Root type="single" bind:value={form.status} disabled={isCardDisabled('bookingDetails')}>
 									<Select.Trigger id="status" class="w-full">
 										<Badge variant={getStatusVariant(form.status)}>{form.status}</Badge>
 									</Select.Trigger>
@@ -222,14 +287,26 @@
 										<Select.Item value="Cancelled">Cancelled</Select.Item>
 									</Select.Content>
 								</Select.Root>
+								{#if fieldError('status')}
+									<p class="text-destructive text-xs">{fieldError('status')}</p>
+								{/if}
 							</div>
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Schedule</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('schedule')}>
+								{#if cardLocks.schedule}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="space-y-2">
@@ -239,8 +316,11 @@
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingStart)}
 								onchange={(e) => form.bookingStart = fromDateTimeLocal(e.currentTarget.value)}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('schedule')}
 							/>
+							{#if fieldError('bookingStart')}
+								<p class="text-destructive text-xs">{fieldError('bookingStart')}</p>
+							{/if}
 						</div>
 						<div class="space-y-2">
 							<Label for="bookingEnd">End</Label>
@@ -249,35 +329,55 @@
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingEnd)}
 								onchange={(e) => form.bookingEnd = fromDateTimeLocal(e.currentTarget.value)}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('schedule')}
 							/>
+							{#if fieldError('bookingEnd')}
+								<p class="text-destructive text-xs">{fieldError('bookingEnd')}</p>
+							{/if}
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Sample Information</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('sampleInfo')}>
+								{#if cardLocks.sampleInfo}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="space-y-2">
 							<Label>Sample ID(s)</Label>
+							{#if fieldError('sampleId')}
+								<p class="text-destructive text-xs">{fieldError('sampleId')}</p>
+							{/if}
 							{#each form.sampleId as _, i}
-								<div class="flex items-center gap-2">
-									<Input
-										value={form.sampleId[i]}
-										onchange={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
-										placeholder="Sample ID"
-										disabled={!isFormEditable}
-									/>
-									{#if isFormEditable}
-										<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('sampleId', i)}>
-											<XIcon class="size-4" />
-										</Button>
+								<div class="space-y-1">
+									<div class="flex items-center gap-2">
+										<Input
+											value={form.sampleId[i]}
+											onchange={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
+											placeholder="Sample ID"
+											disabled={isCardDisabled('sampleInfo')}
+										/>
+										{#if !isCardDisabled('sampleInfo')}
+											<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('sampleId', i)}>
+												<XIcon class="size-4" />
+											</Button>
+										{/if}
+									</div>
+									{#if fieldError(`sampleId.${i}`)}
+										<p class="text-destructive text-xs">{fieldError(`sampleId.${i}`)}</p>
 									{/if}
 								</div>
 							{/each}
-							{#if isFormEditable}
+							{#if !isCardDisabled('sampleInfo')}
 								<Button variant="outline" size="sm" onclick={() => addToList('sampleId')}>
 									<PlusIcon class="size-4" />
 									Add Sample ID
@@ -289,7 +389,7 @@
 								id="sampleSplit"
 								checked={form.sampleSplit}
 								onCheckedChange={(checked) => form.sampleSplit = checked === true}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('sampleInfo')}
 							/>
 							<Label for="sampleSplit">Sample Split</Label>
 						</div>
@@ -302,16 +402,16 @@
 											value={form.splitSampleId[i]}
 											onchange={(e) => updateListItem('splitSampleId', i, e.currentTarget.value)}
 											placeholder="Split Sample ID"
-											disabled={!isFormEditable}
+											disabled={isCardDisabled('sampleInfo')}
 										/>
-										{#if isFormEditable}
+										{#if !isCardDisabled('sampleInfo')}
 											<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('splitSampleId', i)}>
 												<XIcon class="size-4" />
 											</Button>
 										{/if}
 									</div>
 								{/each}
-								{#if isFormEditable}
+								{#if !isCardDisabled('sampleInfo')}
 									<Button variant="outline" size="sm" onclick={() => addToList('splitSampleId')}>
 										<PlusIcon class="size-4" />
 										Add Split Sample ID
@@ -323,8 +423,17 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Hazards</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('hazards')}>
+								{#if cardLocks.hazards}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="flex items-center gap-2">
@@ -332,7 +441,7 @@
 								id="tritium"
 								checked={form.tritium}
 								onCheckedChange={(checked) => form.tritium = checked === true}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('hazards')}
 							/>
 							<Label for="tritium">Tritium</Label>
 						</div>
@@ -341,7 +450,7 @@
 								id="beryllium"
 								checked={form.beryllium}
 								onCheckedChange={(checked) => form.beryllium = checked === true}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('hazards')}
 							/>
 							<Label for="beryllium">Beryllium</Label>
 						</div>
@@ -350,7 +459,7 @@
 								id="betaGamma"
 								checked={form.betaGamma}
 								onCheckedChange={(checked) => form.betaGamma = checked === true}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('hazards')}
 							/>
 							<Label for="betaGamma">Beta/Gamma</Label>
 						</div>
@@ -358,11 +467,23 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Internal User</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('internalUser')}>
+								{#if cardLocks.internalUser}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.internalUser)}
+						{#if fieldError('internalUser')}
+							<p class="text-destructive text-xs">{fieldError('internalUser')}</p>
+						{/if}
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-2">
 								<Label for="internalFirstName">First Name</Label>
@@ -370,8 +491,11 @@
 									id="internalFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('internalUser', 'firstName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('internalUser')}
 								/>
+								{#if fieldError('internalUser.0.firstName')}
+									<p class="text-destructive text-xs">{fieldError('internalUser.0.firstName')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="internalLastName">Last Name</Label>
@@ -379,8 +503,11 @@
 									id="internalLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('internalUser', 'lastName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('internalUser')}
 								/>
+								{#if fieldError('internalUser.0.lastName')}
+									<p class="text-destructive text-xs">{fieldError('internalUser.0.lastName')}</p>
+								{/if}
 							</div>
 						</div>
 						<div class="space-y-2">
@@ -390,15 +517,27 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('internalUser', 'email', e.currentTarget.value)}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('internalUser')}
 							/>
+							{#if fieldError('internalUser.0.email')}
+								<p class="text-destructive text-xs">{fieldError('internalUser.0.email')}</p>
+							{/if}
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>External User</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('externalUser')}>
+								{#if cardLocks.externalUser}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.externalUser)}
@@ -409,8 +548,11 @@
 									id="externalFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('externalUser', 'firstName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('externalUser')}
 								/>
+								{#if fieldError('externalUser.0.firstName')}
+									<p class="text-destructive text-xs">{fieldError('externalUser.0.firstName')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="externalLastName">Last Name</Label>
@@ -418,8 +560,11 @@
 									id="externalLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('externalUser', 'lastName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('externalUser')}
 								/>
+								{#if fieldError('externalUser.0.lastName')}
+									<p class="text-destructive text-xs">{fieldError('externalUser.0.lastName')}</p>
+								{/if}
 							</div>
 						</div>
 						<div class="space-y-2">
@@ -429,23 +574,35 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('externalUser', 'email', e.currentTarget.value)}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('externalUser')}
 							/>
+							{#if fieldError('externalUser.0.email')}
+								<p class="text-destructive text-xs">{fieldError('externalUser.0.email')}</p>
+							{/if}
 						</div>
 						<div class="space-y-2">
 							<Label for="institution">Institution</Label>
 							<Input
 								id="institution"
 								bind:value={form.institution}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('externalUser')}
 							/>
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Scientific Support</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('scientificSupport')}>
+								{#if cardLocks.scientificSupport}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.scientificSupport)}
@@ -456,8 +613,11 @@
 									id="supportFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('scientificSupport', 'firstName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('scientificSupport')}
 								/>
+								{#if fieldError('scientificSupport.0.firstName')}
+									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.firstName')}</p>
+								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="supportLastName">Last Name</Label>
@@ -465,8 +625,11 @@
 									id="supportLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('scientificSupport', 'lastName', e.currentTarget.value)}
-									disabled={!isFormEditable}
+									disabled={isCardDisabled('scientificSupport')}
 								/>
+								{#if fieldError('scientificSupport.0.lastName')}
+									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.lastName')}</p>
+								{/if}
 							</div>
 						</div>
 						<div class="space-y-2">
@@ -476,22 +639,34 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('scientificSupport', 'email', e.currentTarget.value)}
-								disabled={!isFormEditable}
+								disabled={isCardDisabled('scientificSupport')}
 							/>
+							{#if fieldError('scientificSupport.0.email')}
+								<p class="text-destructive text-xs">{fieldError('scientificSupport.0.email')}</p>
+							{/if}
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header>
+					<Card.Header class="flex flex-row items-center justify-between">
 						<Card.Title>Notes</Card.Title>
+						{#if isFormEditable}
+							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('notes')}>
+								{#if cardLocks.notes}
+									<LockIcon class="size-4" />
+								{:else}
+									<LockOpenIcon class="size-4" />
+								{/if}
+							</Button>
+						{/if}
 					</Card.Header>
 					<Card.Content>
 						<Textarea
 							bind:value={form.notes}
 							placeholder="Additional notes about this booking..."
 							rows={4}
-							disabled={!isFormEditable}
+							disabled={isCardDisabled('notes')}
 						/>
 					</Card.Content>
 				</Card.Root>
@@ -503,11 +678,16 @@
 						method="POST"
 						action="?/progressStage&uuid={form.bookingUUID}"
 						use:enhance={() => {
+							if (!validateForm()) {
+								stageActionError = "Please fix the validation errors before progressing";
+								return async () => {};
+							}
 							progressingStage = true;
 							stageActionError = "";
 							return async ({ result }) => {
 								progressingStage = false;
 								if (result.type === "success") {
+									fieldErrors = {};
 									await invalidateAll();
 								} else if (result.type === "failure" && result.data) {
 									stageActionError = result.data.error as string;
@@ -541,11 +721,16 @@
 							method="POST"
 							action="?/save&uuid={form.bookingUUID}"
 							use:enhance={() => {
+								if (!validateForm()) {
+									saveError = "Validation errors";
+									return async () => {};
+								}
 								saving = true;
 								saveError = "";
 								return async ({ result }) => {
 									saving = false;
 									if (result.type === "success") {
+										fieldErrors = {};
 										await invalidateAll();
 									} else if (result.type === "failure" && result.data) {
 										saveError = result.data.error as string;
@@ -690,7 +875,7 @@
 										Progress to Ingest
 									{/if}
 								</Button>
-							</form>							
+							</form>
 							<form
 								method="POST"
 								action="?/progressStage&uuid={form.bookingUUID}"
@@ -800,7 +985,7 @@
 							<Button type="submit" variant="outline" disabled={progressingStage}>
 								Revert to Data Export
 							</Button>
-						</form>				
+						</form>
 					</div>
 				</div>
 			{/if}

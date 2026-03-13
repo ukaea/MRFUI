@@ -38,26 +38,14 @@
 	let currentStage = $derived<Stage>((form.stage as Stage) || "Initial");
 	let isFormEditable = $derived(currentStage === "Initial");
 
-	// Per-card lock states (locked by default)
-	type CardKey = 'bookingDetails' | 'schedule' | 'sampleInfo' | 'hazards' | 'internalUser' | 'externalUser' | 'scientificSupport' | 'notes';
-	let cardLocks = $state<Record<CardKey, boolean>>({
-		bookingDetails: true,
-		schedule: true,
-		sampleInfo: true,
-		hazards: true,
-		internalUser: true,
-		externalUser: true,
-		scientificSupport: true,
-		notes: true,
-	});
+	// Global lock state (locked by default)
+	let formLocked = $state(true);
 
-	function toggleLock(card: CardKey) {
-		cardLocks[card] = !cardLocks[card];
+	function toggleLock() {
+		formLocked = !formLocked;
 	}
 
-	function isCardDisabled(card: CardKey): boolean {
-		return !isFormEditable || cardLocks[card];
-	}
+	let isDisabled = $derived(!isFormEditable || formLocked);
 
 	// Collapsible open states
 	let importedOpen = $state(true);
@@ -195,7 +183,18 @@
 				</p>
 			</div>
 		</div>
-		<Badge variant="outline" class="text-sm">Stage: {currentStage}</Badge>
+		<div class="flex items-center gap-2">
+			{#if isFormEditable}
+				<Button variant="ghost" size="icon" onclick={toggleLock}>
+					{#if formLocked}
+						<LockIcon class="size-5" />
+					{:else}
+						<LockOpenIcon class="size-5" />
+					{/if}
+				</Button>
+			{/if}
+			<Badge variant="outline" class="text-sm">Stage: {currentStage}</Badge>
+		</div>
 	</div>
 
 	<!-- Stage 1: Initial -->
@@ -215,17 +214,8 @@
 		<Collapsible.Content class="border-t">
 			<div class="grid gap-6 md:grid-cols-2 p-6">
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Booking Details</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('bookingDetails')}>
-								{#if cardLocks.bookingDetails}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="grid grid-cols-2 gap-4">
@@ -239,25 +229,25 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="seid">SEID</Label>
-								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={isCardDisabled('bookingDetails')} />
+								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={isDisabled} />
 								{#if fieldError('seid')}
 									<p class="text-destructive text-xs">{fieldError('seid')}</p>
 								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="seidDescription">SEID Description</Label>
-								<Input id="seidDescription" bind:value={form.seidDescription} placeholder="Equipment name" disabled={isCardDisabled('bookingDetails')} />
+								<Input id="seidDescription" bind:value={form.seidDescription} placeholder="Equipment name" disabled={isDisabled} />
 							</div>
 							<div class="space-y-2">
 								<Label for="labLocation">Lab Location</Label>
-								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={isCardDisabled('bookingDetails')} />
+								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={isDisabled} />
 								{#if fieldError('labLocation')}
 									<p class="text-destructive text-xs">{fieldError('labLocation')}</p>
 								{/if}
 							</div>
 							<div class="space-y-2">
 								<Label for="workCategory">Work Category</Label>
-								<Select.Root type="single" bind:value={form.workCategory} disabled={isCardDisabled('bookingDetails')}>
+								<Select.Root type="single" bind:value={form.workCategory} disabled={isDisabled}>
 									<Select.Trigger id="workCategory" class="w-full">
 										{form.workCategory}
 									</Select.Trigger>
@@ -275,7 +265,7 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="status">Status</Label>
-								<Select.Root type="single" bind:value={form.status} disabled={isCardDisabled('bookingDetails')}>
+								<Select.Root type="single" bind:value={form.status} disabled={isDisabled}>
 									<Select.Trigger id="status" class="w-full">
 										<Badge variant={getStatusVariant(form.status)}>{form.status}</Badge>
 									</Select.Trigger>
@@ -296,17 +286,8 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Schedule</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('schedule')}>
-								{#if cardLocks.schedule}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="space-y-2">
@@ -316,7 +297,7 @@
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingStart)}
 								onchange={(e) => form.bookingStart = fromDateTimeLocal(e.currentTarget.value)}
-								disabled={isCardDisabled('schedule')}
+								disabled={isDisabled}
 							/>
 							{#if fieldError('bookingStart')}
 								<p class="text-destructive text-xs">{fieldError('bookingStart')}</p>
@@ -329,7 +310,7 @@
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingEnd)}
 								onchange={(e) => form.bookingEnd = fromDateTimeLocal(e.currentTarget.value)}
-								disabled={isCardDisabled('schedule')}
+								disabled={isDisabled}
 							/>
 							{#if fieldError('bookingEnd')}
 								<p class="text-destructive text-xs">{fieldError('bookingEnd')}</p>
@@ -339,17 +320,8 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Sample Information</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('sampleInfo')}>
-								{#if cardLocks.sampleInfo}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="space-y-2">
@@ -364,9 +336,9 @@
 											value={form.sampleId[i]}
 											onchange={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
 											placeholder="Sample ID"
-											disabled={isCardDisabled('sampleInfo')}
+											disabled={isDisabled}
 										/>
-										{#if !isCardDisabled('sampleInfo')}
+										{#if !isDisabled}
 											<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('sampleId', i)}>
 												<XIcon class="size-4" />
 											</Button>
@@ -377,7 +349,7 @@
 									{/if}
 								</div>
 							{/each}
-							{#if !isCardDisabled('sampleInfo')}
+							{#if !isDisabled}
 								<Button variant="outline" size="sm" onclick={() => addToList('sampleId')}>
 									<PlusIcon class="size-4" />
 									Add Sample ID
@@ -389,7 +361,7 @@
 								id="sampleSplit"
 								checked={form.sampleSplit}
 								onCheckedChange={(checked) => form.sampleSplit = checked === true}
-								disabled={isCardDisabled('sampleInfo')}
+								disabled={isDisabled}
 							/>
 							<Label for="sampleSplit">Sample Split</Label>
 						</div>
@@ -402,16 +374,16 @@
 											value={form.splitSampleId[i]}
 											onchange={(e) => updateListItem('splitSampleId', i, e.currentTarget.value)}
 											placeholder="Split Sample ID"
-											disabled={isCardDisabled('sampleInfo')}
+											disabled={isDisabled}
 										/>
-										{#if !isCardDisabled('sampleInfo')}
+										{#if !isDisabled}
 											<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('splitSampleId', i)}>
 												<XIcon class="size-4" />
 											</Button>
 										{/if}
 									</div>
 								{/each}
-								{#if !isCardDisabled('sampleInfo')}
+								{#if !isDisabled}
 									<Button variant="outline" size="sm" onclick={() => addToList('splitSampleId')}>
 										<PlusIcon class="size-4" />
 										Add Split Sample ID
@@ -423,17 +395,8 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Hazards</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('hazards')}>
-								{#if cardLocks.hazards}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						<div class="flex items-center gap-2">
@@ -441,7 +404,7 @@
 								id="tritium"
 								checked={form.tritium}
 								onCheckedChange={(checked) => form.tritium = checked === true}
-								disabled={isCardDisabled('hazards')}
+								disabled={isDisabled}
 							/>
 							<Label for="tritium">Tritium</Label>
 						</div>
@@ -450,7 +413,7 @@
 								id="beryllium"
 								checked={form.beryllium}
 								onCheckedChange={(checked) => form.beryllium = checked === true}
-								disabled={isCardDisabled('hazards')}
+								disabled={isDisabled}
 							/>
 							<Label for="beryllium">Beryllium</Label>
 						</div>
@@ -459,7 +422,7 @@
 								id="betaGamma"
 								checked={form.betaGamma}
 								onCheckedChange={(checked) => form.betaGamma = checked === true}
-								disabled={isCardDisabled('hazards')}
+								disabled={isDisabled}
 							/>
 							<Label for="betaGamma">Beta/Gamma</Label>
 						</div>
@@ -467,17 +430,8 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Internal User</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('internalUser')}>
-								{#if cardLocks.internalUser}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.internalUser)}
@@ -491,7 +445,7 @@
 									id="internalFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('internalUser', 'firstName', e.currentTarget.value)}
-									disabled={isCardDisabled('internalUser')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('internalUser.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('internalUser.0.firstName')}</p>
@@ -503,7 +457,7 @@
 									id="internalLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('internalUser', 'lastName', e.currentTarget.value)}
-									disabled={isCardDisabled('internalUser')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('internalUser.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('internalUser.0.lastName')}</p>
@@ -517,7 +471,7 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('internalUser', 'email', e.currentTarget.value)}
-								disabled={isCardDisabled('internalUser')}
+								disabled={isDisabled}
 							/>
 							{#if fieldError('internalUser.0.email')}
 								<p class="text-destructive text-xs">{fieldError('internalUser.0.email')}</p>
@@ -527,17 +481,8 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>External User</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('externalUser')}>
-								{#if cardLocks.externalUser}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.externalUser)}
@@ -548,7 +493,7 @@
 									id="externalFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('externalUser', 'firstName', e.currentTarget.value)}
-									disabled={isCardDisabled('externalUser')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('externalUser.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('externalUser.0.firstName')}</p>
@@ -560,7 +505,7 @@
 									id="externalLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('externalUser', 'lastName', e.currentTarget.value)}
-									disabled={isCardDisabled('externalUser')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('externalUser.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('externalUser.0.lastName')}</p>
@@ -574,7 +519,7 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('externalUser', 'email', e.currentTarget.value)}
-								disabled={isCardDisabled('externalUser')}
+								disabled={isDisabled}
 							/>
 							{#if fieldError('externalUser.0.email')}
 								<p class="text-destructive text-xs">{fieldError('externalUser.0.email')}</p>
@@ -585,24 +530,15 @@
 							<Input
 								id="institution"
 								bind:value={form.institution}
-								disabled={isCardDisabled('externalUser')}
+								disabled={isDisabled}
 							/>
 						</div>
 					</Card.Content>
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Scientific Support</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('scientificSupport')}>
-								{#if cardLocks.scientificSupport}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.scientificSupport)}
@@ -613,7 +549,7 @@
 									id="supportFirstName"
 									value={user?.firstName ?? ""}
 									onchange={(e) => updateUser('scientificSupport', 'firstName', e.currentTarget.value)}
-									disabled={isCardDisabled('scientificSupport')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('scientificSupport.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.firstName')}</p>
@@ -625,7 +561,7 @@
 									id="supportLastName"
 									value={user?.lastName ?? ""}
 									onchange={(e) => updateUser('scientificSupport', 'lastName', e.currentTarget.value)}
-									disabled={isCardDisabled('scientificSupport')}
+									disabled={isDisabled}
 								/>
 								{#if fieldError('scientificSupport.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.lastName')}</p>
@@ -639,7 +575,7 @@
 								type="email"
 								value={user?.email ?? ""}
 								onchange={(e) => updateUser('scientificSupport', 'email', e.currentTarget.value)}
-								disabled={isCardDisabled('scientificSupport')}
+								disabled={isDisabled}
 							/>
 							{#if fieldError('scientificSupport.0.email')}
 								<p class="text-destructive text-xs">{fieldError('scientificSupport.0.email')}</p>
@@ -649,24 +585,15 @@
 				</Card.Root>
 
 				<Card.Root>
-					<Card.Header class="flex flex-row items-center justify-between">
+					<Card.Header>
 						<Card.Title>Notes</Card.Title>
-						{#if isFormEditable}
-							<Button variant="ghost" size="icon" class="size-8" onclick={() => toggleLock('notes')}>
-								{#if cardLocks.notes}
-									<LockIcon class="size-4" />
-								{:else}
-									<LockOpenIcon class="size-4" />
-								{/if}
-							</Button>
-						{/if}
 					</Card.Header>
 					<Card.Content>
 						<Textarea
 							bind:value={form.notes}
 							placeholder="Additional notes about this booking..."
 							rows={4}
-							disabled={isCardDisabled('notes')}
+							disabled={isDisabled}
 						/>
 					</Card.Content>
 				</Card.Root>

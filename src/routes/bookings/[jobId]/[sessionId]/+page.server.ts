@@ -117,6 +117,11 @@ export const actions: Actions = {
 	},
 
 	createFolders: async ({ url }) => {
+		const fileServiceUrl = env.FILE_SERVICE_URL;
+		if (!fileServiceUrl) {
+			return fail(500, { error: "FILE_SERVICE_URL is not configured" });
+		}
+
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -127,9 +132,24 @@ export const actions: Actions = {
 			return fail(400, { error: "Missing booking UUID" });
 		}
 
+		const bookingResponse = await fetch(`${backendUrl}/bookings/${uuid}`);
+		if (!bookingResponse.ok) {
+			return fail(bookingResponse.status, { error: "Booking not found" });
+		}
+		const booking = await bookingResponse.json();
+
+		const { jobId, seid, sessionId } = booking;
+		if (!jobId || !seid || !sessionId) {
+			return fail(400, { error: "Booking is missing jobId, seid, or sessionId" });
+		}
+
+		const folderPath = `MRF/${jobId}/${seid}/${sessionId}`;
 		const response = await fetch(
-			`${backendUrl}/bookings/${uuid}/create-folders`,
-			{ method: "POST" },
+			`${fileServiceUrl}/folders/create?path=${encodeURIComponent(folderPath)}`,
+			{
+				method: "POST",
+				headers: { "Accept": "application/json" },
+			},
 		);
 
 		if (!response.ok) {

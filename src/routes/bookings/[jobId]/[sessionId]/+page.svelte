@@ -326,9 +326,6 @@
 					<Card.Content class="space-y-4">
 						<div class="space-y-2">
 							<Label>Sample ID(s)</Label>
-							{#if fieldError('sampleId')}
-								<p class="text-destructive text-xs">{fieldError('sampleId')}</p>
-							{/if}
 							{#each form.sampleId as _, i}
 								<div class="space-y-1">
 									<div class="flex items-center gap-2">
@@ -435,9 +432,6 @@
 					</Card.Header>
 					<Card.Content class="space-y-4">
 						{@const user = getFirstUser(form.internalUser)}
-						{#if fieldError('internalUser')}
-							<p class="text-destructive text-xs">{fieldError('internalUser')}</p>
-						{/if}
 						<div class="grid grid-cols-2 gap-4">
 							<div class="space-y-2">
 								<Label for="internalFirstName">First Name</Label>

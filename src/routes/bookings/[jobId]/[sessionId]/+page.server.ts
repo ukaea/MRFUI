@@ -4,7 +4,11 @@ import { MRFSchema } from "$lib/components/schemas";
 import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
 
-export const load: PageServerLoad = async ({ url }) => {
+function bearer(token: string | null): Record<string, string> {
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export const load: PageServerLoad = async ({ url, locals }) => {
 	const backendUrl = env.MRF_BACKEND_URL;
 	if (!backendUrl) {
 		throw error(500, "MRF_BACKEND_URL is not configured");
@@ -15,7 +19,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		throw error(400, "Missing booking UUID");
 	}
 
-	const response = await fetch(`${backendUrl}/bookings/${uuid}`);
+	const response = await fetch(`${backendUrl}/bookings/${uuid}`, {
+		headers: bearer(locals.accessToken),
+	});
 	if (!response.ok) {
 		throw error(response.status, `Booking not found: ${uuid}`);
 	}
@@ -26,7 +32,7 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	save: async ({ request, url }) => {
+	save: async ({ request, url, locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -48,26 +54,21 @@ export const actions: Actions = {
 			return fail(400, { error: `Validation failed: ${messages.join(", ")}` });
 		}
 
-		const response = await fetch(
-			`${backendUrl}/bookings/${uuid}`,
-			{
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(result.data),
-			},
-		);
+		const response = await fetch(`${backendUrl}/bookings/${uuid}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json", ...bearer(locals.accessToken) },
+			body: JSON.stringify(result.data),
+		});
 
 		if (!response.ok) {
 			const text = await response.text();
-			return fail(response.status, {
-				error: `Failed to update booking: ${text}`,
-			});
+			return fail(response.status, { error: `Failed to update booking: ${text}` });
 		}
 
 		return { success: true };
 	},
 
-	progressStage: async ({ request, url }) => {
+	progressStage: async ({ request, url, locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -87,7 +88,9 @@ export const actions: Actions = {
 			"Ingest": ["Data Export"],
 		};
 
-		const getResponse = await fetch(`${backendUrl}/bookings/${uuid}`);
+		const auth = bearer(locals.accessToken);
+
+		const getResponse = await fetch(`${backendUrl}/bookings/${uuid}`, { headers: auth });
 		if (!getResponse.ok) {
 			return fail(getResponse.status, { error: "Booking not found" });
 		}
@@ -102,21 +105,19 @@ export const actions: Actions = {
 
 		const response = await fetch(`${backendUrl}/bookings/${uuid}`, {
 			method: "PUT",
-			headers: { "Content-Type": "application/json" },
+			headers: { "Content-Type": "application/json", ...auth },
 			body: JSON.stringify({ ...booking, stage: newStage }),
 		});
 
 		if (!response.ok) {
 			const text = await response.text();
-			return fail(response.status, {
-				error: `Failed to progress stage: ${text}`,
-			});
+			return fail(response.status, { error: `Failed to progress stage: ${text}` });
 		}
 
 		return { success: true };
 	},
 
-	createFolders: async ({ url }) => {
+	createFolders: async ({ url, locals }) => {
 		const fileServiceUrl = env.FILE_SERVICE_URL;
 		if (!fileServiceUrl) {
 			return fail(500, { error: "FILE_SERVICE_URL is not configured" });
@@ -132,7 +133,9 @@ export const actions: Actions = {
 			return fail(400, { error: "Missing booking UUID" });
 		}
 
-		const bookingResponse = await fetch(`${backendUrl}/bookings/${uuid}`);
+		const auth = bearer(locals.accessToken);
+
+		const bookingResponse = await fetch(`${backendUrl}/bookings/${uuid}`, { headers: auth });
 		if (!bookingResponse.ok) {
 			return fail(bookingResponse.status, { error: "Booking not found" });
 		}
@@ -148,22 +151,20 @@ export const actions: Actions = {
 			`${fileServiceUrl}/folders/create?path=${encodeURIComponent(folderPath)}`,
 			{
 				method: "POST",
-				headers: { "Accept": "application/json" },
+				headers: { Accept: "application/json", ...auth },
 			},
 		);
 
 		if (!response.ok) {
 			const text = await response.text();
-			return fail(response.status, {
-				error: `Failed to create folders: ${text}`,
-			});
+			return fail(response.status, { error: `Failed to create folders: ${text}` });
 		}
 
 		const result = await response.json();
 		return { success: true, ...result };
 	},
 
-	startDataTransfer: async ({ url }) => {
+	startDataTransfer: async ({ url, locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -174,23 +175,21 @@ export const actions: Actions = {
 			return fail(400, { error: "Missing booking UUID" });
 		}
 
-		const response = await fetch(
-			`${backendUrl}/bookings/${uuid}/start-transfer`,
-			{ method: "POST" },
-		);
+		const response = await fetch(`${backendUrl}/bookings/${uuid}/start-transfer`, {
+			method: "POST",
+			headers: bearer(locals.accessToken),
+		});
 
 		if (!response.ok) {
 			const text = await response.text();
-			return fail(response.status, {
-				error: `Failed to start data transfer: ${text}`,
-			});
+			return fail(response.status, { error: `Failed to start data transfer: ${text}` });
 		}
 
 		const result = await response.json();
 		return { success: true, ...result };
 	},
 
-	ingest: async ({ url }) => {
+	ingest: async ({ url, locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -201,16 +200,14 @@ export const actions: Actions = {
 			return fail(400, { error: "Missing booking UUID" });
 		}
 
-		const response = await fetch(
-			`${backendUrl}/bookings/${uuid}/ingest`,
-			{ method: "POST" },
-		);
+		const response = await fetch(`${backendUrl}/bookings/${uuid}/ingest`, {
+			method: "POST",
+			headers: bearer(locals.accessToken),
+		});
 
 		if (!response.ok) {
 			const text = await response.text();
-			return fail(response.status, {
-				error: `Failed to ingest: ${text}`,
-			});
+			return fail(response.status, { error: `Failed to ingest: ${text}` });
 		}
 
 		const result = await response.json();

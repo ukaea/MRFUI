@@ -4,7 +4,11 @@ import type { MRFSchema } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
 import { error, fail } from "@sveltejs/kit";
 
-export const load: PageServerLoad = async ({ url }) => {
+function bearer(token: string | null): Record<string, string> {
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export const load: PageServerLoad = async ({ url, locals }) => {
 	const backendUrl = env.MRF_BACKEND_URL;
 	if (!backendUrl) {
 		throw error(500, "MRF_BACKEND_URL is not configured");
@@ -14,15 +18,18 @@ export const load: PageServerLoad = async ({ url }) => {
 	const page = Number(url.searchParams.get("page")) || 1;
 	const pageSize = Number(url.searchParams.get("page_size")) || 10;
 
+	const auth = bearer(locals.accessToken);
 	let response: Response;
 
 	if (search) {
 		response = await fetch(
 			`${backendUrl}/bookings/search?key=jobId&value=${encodeURIComponent(search)}`,
+			{ headers: auth },
 		);
 	} else {
 		response = await fetch(
 			`${backendUrl}/bookings?page=${page}&page_size=${pageSize}`,
+			{ headers: auth },
 		);
 	}
 
@@ -48,7 +55,7 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	sync: async () => {
+	sync: async ({ locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -56,6 +63,7 @@ export const actions: Actions = {
 
 		const response = await fetch(`${backendUrl}/sync`, {
 			method: "POST",
+			headers: bearer(locals.accessToken),
 		});
 
 		if (!response.ok) {

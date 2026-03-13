@@ -3,7 +3,11 @@ import type { PageServerLoad, Actions } from "./$types";
 import type { MRFSchema } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
 
-export const load: PageServerLoad = async ({ url }) => {
+function bearer(token: string | null): Record<string, string> {
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export const load: PageServerLoad = async ({ url, locals }) => {
 	const backendUrl = env.MRF_BACKEND_URL;
 	if (!backendUrl) {
 		throw error(500, "MRF_BACKEND_URL is not configured");
@@ -14,7 +18,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		throw error(400, "Missing booking UUID");
 	}
 
-	const response = await fetch(`${backendUrl}/bookings/${uuid}`);
+	const response = await fetch(`${backendUrl}/bookings/${uuid}`, {
+		headers: bearer(locals.accessToken),
+	});
 	if (!response.ok) {
 		throw error(response.status, `Booking not found: ${uuid}`);
 	}
@@ -25,7 +31,7 @@ export const load: PageServerLoad = async ({ url }) => {
 };
 
 export const actions: Actions = {
-	deleteBooking: async ({ url }) => {
+	deleteBooking: async ({ url, locals }) => {
 		const backendUrl = env.MRF_BACKEND_URL;
 		if (!backendUrl) {
 			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
@@ -38,6 +44,7 @@ export const actions: Actions = {
 
 		const response = await fetch(`${backendUrl}/admin/bookings/${uuid}`, {
 			method: "DELETE",
+			headers: bearer(locals.accessToken),
 		});
 
 		if (!response.ok) {

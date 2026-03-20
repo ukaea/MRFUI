@@ -4,10 +4,9 @@ import { svelteKitHandler } from "better-auth/svelte-kit";
 import { env } from "$env/dynamic/private";
 import type { Handle } from "@sveltejs/kit";
 
-// Paths that do not require authentication
+
 const UNPROTECTED_PATHS = ["/api/auth", "/login"];
 
-/** Decode a JWT payload without verifying the signature. */
 function decodeJwtPayload(token: string): Record<string, unknown> {
 	try {
 		return JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
@@ -16,11 +15,29 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 	}
 }
 
-/** Check whether the token contains the required Keycloak group.
- *  Keycloak typically emits groups as ["/HIVE", "/other"] or ["HIVE"]. */
-function hasRequiredGroup(token: string, requiredGroup: string): boolean {
-	const payload = decodeJwtPayload(token);
-	const groups = (payload.groups as string[] | undefined) ?? [];
+async function fetchUserGroupsFromUserInfo(accessToken: string): Promise<string[]> {
+	const userInfoUrl = `${env.KEYCLOAK_URL}/realms/${env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`;
+	try {
+		const res = await fetch(userInfoUrl, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+		});
+		if (!res.ok) return [];
+		const info = await res.json();
+		return (info.groups as string[] | undefined) ?? [];
+	} catch {
+		return [];
+	}
+}
+
+/** Returns groups from the JWT first; falls back to the userinfo endpoint if absent. */
+async function getUserGroups(accessToken: string): Promise<string[]> {
+	const payload = decodeJwtPayload(accessToken);
+	const tokenGroups = (payload.groups as string[] | undefined);
+	if (tokenGroups && tokenGroups.length > 0) return tokenGroups;
+	return fetchUserGroupsFromUserInfo(accessToken);
+}
+
+function groupMatches(groups: string[], requiredGroup: string): boolean {
 	return groups.some((g) => g === requiredGroup || g === `/${requiredGroup}`);
 }
 
@@ -48,7 +65,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.user = session.user;
 		event.locals.session = session.session;
 
-		// Retrieve the stored Keycloak tokens from the account record
 		const ctx = await auth.$context;
 		const accounts = await ctx.internalAdapter.findAccountByUserId(
 			session.user.id,
@@ -103,9 +119,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 				event.locals.accessToken = keycloakAccount.accessToken ?? null;
 			}
 
-			// Authorisation: check group membership from the JWT claims
+			// Authorisation: check group membership (JWT first, userinfo fallback)
 			if (authzEnabled && requiredGroup && event.locals.accessToken) {
-				if (!hasRequiredGroup(event.locals.accessToken, requiredGroup)) {
+				const groups = await getUserGroups(event.locals.accessToken);
+				console.log("User groups:", groups);
+				if (!groupMatches(groups, requiredGroup)) {
 					throw error(403, `Access denied: you must be a member of the '${requiredGroup}' group.`);
 				}
 			}

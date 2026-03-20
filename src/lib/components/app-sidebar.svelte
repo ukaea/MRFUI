@@ -23,10 +23,6 @@
 	import type { ComponentProps } from "svelte";
 
 	const data = {
-		user: {
-			name: "MRF RO",
-			email: "mrfro@ukaea.uk",
-		},
 		navMain: [
 			{
 				title: "Dashboard",
@@ -75,7 +71,7 @@
 		<NavSecondary items={data.navSecondary} class="mt-auto" />
 	</Sidebar.Content>
 	<Sidebar.Footer>
-		<NavUser user={data.user} />
+		<NavUser />
 	</Sidebar.Footer>
 	<Sidebar.Rail />
 </Sidebar.Root>

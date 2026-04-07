@@ -1,7 +1,6 @@
 <script lang="ts">
 	import CameraIcon from "@tabler/icons-svelte/icons/camera";
 	import ChartBarIcon from "@tabler/icons-svelte/icons/chart-bar";
-	import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
 	import DatabaseIcon from "@tabler/icons-svelte/icons/database";
 	import FileAiIcon from "@tabler/icons-svelte/icons/file-ai";
 	import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
@@ -24,11 +23,6 @@
 
 	const data = {
 		navMain: [
-			{
-				title: "Dashboard",
-				url: "/dashboard",
-				icon: DashboardIcon,
-			},
 			{
 				title: "Bookings",
 				url: "/bookings",

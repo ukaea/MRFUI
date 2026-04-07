@@ -17,6 +17,10 @@
 	import ChevronDownIcon from "@tabler/icons-svelte/icons/chevron-down";
 	import LockIcon from "@tabler/icons-svelte/icons/lock";
 	import LockOpenIcon from "@tabler/icons-svelte/icons/lock-open";
+	import FolderIcon from "@tabler/icons-svelte/icons/folder";
+	import FolderOpenIcon from "@tabler/icons-svelte/icons/folder-open";
+	import CircleCheckIcon from "@tabler/icons-svelte/icons/circle-check";
+	import { Progress } from "$lib/components/ui/progress/index.js";
 	import { MRFSchema } from "$lib/components/schemas";
 	import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
 
@@ -30,6 +34,7 @@
 
 	let saving = $state(false);
 	let saveError = $state("");
+	let saveResult = $state<"idle" | "success" | "error">("idle");
 
 	// Stage state
 	const STAGES = ["Initial", "Data Export", "Ingest"] as const;
@@ -68,9 +73,23 @@
 
 	// Stage action loading states
 	let progressingStage = $state(false);
+	let progressStageResult = $state<"idle" | "success" | "error">("idle");
+	let progressIngestResult = $state<"idle" | "success" | "error">("idle");
 	let creatingFolders = $state(false);
+	let createFoldersResult = $state<"idle" | "success" | "error">("idle");
+	let createFoldersMessage = $state("");
 	let startingTransfer = $state(false);
+	let setupDataExportResult = $state<"idle" | "success" | "error">("idle");
+	let setupDataExportMessage = $state("");
+	let exportStats = $state<Record<string, unknown> | null>(null);
+	let transferring = $state(false);
+	let transferResult = $state<"idle" | "success" | "error">("idle");
+	let transferMessage = $state("");
+	let transferProgress = $state(0);
 	let ingesting = $state(false);
+	let ingestStepsComplete = $state(0); // 0 = not started, 1-4 = steps done
+	let ingestDone = $state(false);
+	let ingestCatalogueUrl = $state("");
 	let stageActionError = $state("");
 	let stageActionSuccess = $state("");
 
@@ -296,7 +315,7 @@
 								id="bookingStart"
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingStart)}
-								onchange={(e) => form.bookingStart = fromDateTimeLocal(e.currentTarget.value)}
+								oninput={(e) => form.bookingStart = fromDateTimeLocal(e.currentTarget.value)}
 								disabled={isDisabled}
 							/>
 							{#if fieldError('bookingStart')}
@@ -309,7 +328,7 @@
 								id="bookingEnd"
 								type="datetime-local"
 								value={toDateTimeLocal(form.bookingEnd)}
-								onchange={(e) => form.bookingEnd = fromDateTimeLocal(e.currentTarget.value)}
+								oninput={(e) => form.bookingEnd = fromDateTimeLocal(e.currentTarget.value)}
 								disabled={isDisabled}
 							/>
 							{#if fieldError('bookingEnd')}
@@ -331,7 +350,7 @@
 									<div class="flex items-center gap-2">
 										<Input
 											value={form.sampleId[i]}
-											onchange={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
+											oninput={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
 											placeholder="Sample ID"
 											disabled={isDisabled}
 										/>
@@ -369,7 +388,7 @@
 									<div class="flex items-center gap-2">
 										<Input
 											value={form.splitSampleId[i]}
-											onchange={(e) => updateListItem('splitSampleId', i, e.currentTarget.value)}
+											oninput={(e) => updateListItem('splitSampleId', i, e.currentTarget.value)}
 											placeholder="Split Sample ID"
 											disabled={isDisabled}
 										/>
@@ -438,7 +457,7 @@
 								<Input
 									id="internalFirstName"
 									value={user?.firstName ?? ""}
-									onchange={(e) => updateUser('internalUser', 'firstName', e.currentTarget.value)}
+									oninput={(e) => updateUser('internalUser', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('internalUser.0.firstName')}
@@ -450,7 +469,7 @@
 								<Input
 									id="internalLastName"
 									value={user?.lastName ?? ""}
-									onchange={(e) => updateUser('internalUser', 'lastName', e.currentTarget.value)}
+									oninput={(e) => updateUser('internalUser', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('internalUser.0.lastName')}
@@ -464,7 +483,7 @@
 								id="internalEmail"
 								type="email"
 								value={user?.email ?? ""}
-								onchange={(e) => updateUser('internalUser', 'email', e.currentTarget.value)}
+								oninput={(e) => updateUser('internalUser', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
 							/>
 							{#if fieldError('internalUser.0.email')}
@@ -486,7 +505,7 @@
 								<Input
 									id="externalFirstName"
 									value={user?.firstName ?? ""}
-									onchange={(e) => updateUser('externalUser', 'firstName', e.currentTarget.value)}
+									oninput={(e) => updateUser('externalUser', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('externalUser.0.firstName')}
@@ -498,7 +517,7 @@
 								<Input
 									id="externalLastName"
 									value={user?.lastName ?? ""}
-									onchange={(e) => updateUser('externalUser', 'lastName', e.currentTarget.value)}
+									oninput={(e) => updateUser('externalUser', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('externalUser.0.lastName')}
@@ -512,7 +531,7 @@
 								id="externalEmail"
 								type="email"
 								value={user?.email ?? ""}
-								onchange={(e) => updateUser('externalUser', 'email', e.currentTarget.value)}
+								oninput={(e) => updateUser('externalUser', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
 							/>
 							{#if fieldError('externalUser.0.email')}
@@ -542,7 +561,7 @@
 								<Input
 									id="supportFirstName"
 									value={user?.firstName ?? ""}
-									onchange={(e) => updateUser('scientificSupport', 'firstName', e.currentTarget.value)}
+									oninput={(e) => updateUser('scientificSupport', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('scientificSupport.0.firstName')}
@@ -554,7 +573,7 @@
 								<Input
 									id="supportLastName"
 									value={user?.lastName ?? ""}
-									onchange={(e) => updateUser('scientificSupport', 'lastName', e.currentTarget.value)}
+									oninput={(e) => updateUser('scientificSupport', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
 								/>
 								{#if fieldError('scientificSupport.0.lastName')}
@@ -568,7 +587,7 @@
 								id="supportEmail"
 								type="email"
 								value={user?.email ?? ""}
-								onchange={(e) => updateUser('scientificSupport', 'email', e.currentTarget.value)}
+								oninput={(e) => updateUser('scientificSupport', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
 							/>
 							{#if fieldError('scientificSupport.0.email')}
@@ -605,24 +624,41 @@
 							}
 							progressingStage = true;
 							stageActionError = "";
+							progressStageResult = "idle";
 							return async ({ result }) => {
 								progressingStage = false;
 								if (result.type === "success") {
 									fieldErrors = {};
+									progressStageResult = "success";
+									await new Promise(resolve => setTimeout(resolve, 600));
 									await invalidateAll();
+									progressStageResult = "idle";
 								} else if (result.type === "failure" && result.data) {
 									stageActionError = result.data.error as string;
+									progressStageResult = "error";
+									setTimeout(() => { progressStageResult = "idle"; }, 3000);
 								} else {
 									stageActionError = "Failed to progress stage";
+									progressStageResult = "error";
+									setTimeout(() => { progressStageResult = "idle"; }, 3000);
 								}
 							};
 						}}
 					>
 						<input type="hidden" name="stage" value="Data Export" />
-						<Button type="submit" disabled={progressingStage}>
+						<Button
+							type="submit"
+							disabled={progressingStage || isDirty}
+							variant={progressStageResult === "error" ? "destructive" : "default"}
+							class={progressStageResult === "success" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+						>
 							{#if progressingStage}
 								<LoaderIcon class="size-4 animate-spin" />
 								Progressing...
+							{:else if progressStageResult === "success"}
+								Progressed!
+							{:else if progressStageResult === "error"}
+								Failed
 							{:else}
 								Progress to Data Export
 							{/if}
@@ -644,28 +680,51 @@
 							use:enhance={() => {
 								if (!validateForm()) {
 									saveError = "Validation errors";
+									saveResult = "error";
+									setTimeout(() => { saveResult = "idle"; saveError = ""; }, 2000);
 									return async () => {};
 								}
 								saving = true;
 								saveError = "";
+								saveResult = "idle";
 								return async ({ result }) => {
 									saving = false;
 									if (result.type === "success") {
 										fieldErrors = {};
+										saveResult = "success";
 										await invalidateAll();
+										form = { ...data.booking };
+										setTimeout(() => { saveResult = "idle"; }, 2000);
 									} else if (result.type === "failure" && result.data) {
 										saveError = result.data.error as string;
+										saveResult = "error";
+										// Conflict — SharePoint had newer data, reload to show it
+										if (result.status === 409) {
+											await invalidateAll();
+										}
+										setTimeout(() => { saveResult = "idle"; }, 3000);
 									} else {
 										saveError = "Failed to save booking";
+										saveResult = "error";
+										setTimeout(() => { saveResult = "idle"; }, 3000);
 									}
 								};
 							}}
 						>
 							<input type="hidden" name="payload" value={JSON.stringify(buildPayload())} />
-							<Button type="submit" disabled={!isDirty || saving}>
+							<Button
+								type="submit"
+								disabled={!isDirty || saving}
+								variant={saveResult === "success" ? "default" : saveResult === "error" ? "destructive" : "default"}
+								class={saveResult === "success" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+							>
 								{#if saving}
 									<LoaderIcon class="size-4 animate-spin" />
 									Saving...
+								{:else if saveResult === "success"}
+									Saved
+								{:else if saveResult === "error"}
+									Save Failed
 								{:else}
 									Save Changes
 								{/if}
@@ -696,10 +755,6 @@
 				<p class="text-muted-foreground text-sm">Complete the Initial stage before accessing Data Export.</p>
 			{:else}
 				<div class="space-y-4">
-					<p class="text-muted-foreground text-sm">
-						Create the directory structure and transfer data for this booking.
-					</p>
-
 					{#if stageActionError}
 						<div class="text-destructive text-sm">{stageActionError}</div>
 					{/if}
@@ -707,64 +762,183 @@
 						<div class="text-sm text-green-600">{stageActionSuccess}</div>
 					{/if}
 
-					<div class="flex items-center gap-3">
+					<div class="space-y-2">
+						<p class="font-medium text-sm">Create the directory structure for this booking</p>
+						<div class="flex items-center gap-3">
 						<form
 							method="POST"
 							action="?/createFolders&uuid={form.bookingUUID}"
 							use:enhance={() => {
 								creatingFolders = true;
-								stageActionError = "";
-								stageActionSuccess = "";
+								createFoldersResult = "idle";
+								createFoldersMessage = "";
 								return async ({ result }) => {
 									creatingFolders = false;
 									if (result.type === "success") {
-										stageActionSuccess = "Folders created successfully";
+										createFoldersResult = "success";
+										createFoldersMessage = "Folders created successfully";
 									} else if (result.type === "failure" && result.data) {
-										stageActionError = result.data.error as string;
+										createFoldersResult = "error";
+										createFoldersMessage = result.data.error as string;
+										setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
 									} else {
-										stageActionError = "Failed to create folders";
+										createFoldersResult = "error";
+										createFoldersMessage = "Failed to create folders";
+										setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
 									}
 								};
 							}}
 						>
-							<Button type="submit" variant="outline" disabled={creatingFolders || currentStage !== "Data Export"}>
-								{#if creatingFolders}
-									<LoaderIcon class="size-4 animate-spin" />
-									Creating...
-								{:else}
-									Create Folders
-								{/if}
+							<Button
+								type="submit"
+								disabled={creatingFolders || currentStage !== "Data Export"}
+								variant={createFoldersResult === "error" ? "destructive" : createFoldersResult === "success" ? "default" : "outline"}
+								class="w-44 {createFoldersResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
+							>
+								{#if creatingFolders}<LoaderIcon class="size-4 animate-spin" />{/if}
+								Create Folders
 							</Button>
 						</form>
+						{#if createFoldersMessage}
+							<span class={createFoldersResult === "success" ? "text-sm text-green-600" : "text-sm text-destructive"}>{createFoldersMessage}</span>
+						{/if}
+						</div>
+						<div class="bg-muted/50 rounded-md border px-4 py-3 font-mono text-sm space-y-1">
+							<div class="flex items-center gap-1.5">
+								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+								<span>MRF</span>
+								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+							</div>
+							<div class="flex items-center gap-1.5 pl-5">
+								<span class="text-muted-foreground select-none">└─</span>
+								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+								<span>{form.jobId}</span>
+								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+							</div>
+							<div class="flex items-center gap-1.5 pl-10">
+								<span class="text-muted-foreground select-none">└─</span>
+								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+								<span>{form.seid}</span>
+								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+							</div>
+							<div class="flex items-center gap-1.5 pl-16">
+								<span class="text-muted-foreground select-none">└─</span>
+								<FolderIcon class="size-4 text-yellow-500 shrink-0" />
+								<span>{form.sessionId}</span>
+								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+							</div>
+						</div>
+					</div>
 
-						<form
-							method="POST"
-							action="?/startDataTransfer&uuid={form.bookingUUID}"
-							use:enhance={() => {
-								startingTransfer = true;
-								stageActionError = "";
-								stageActionSuccess = "";
-								return async ({ result }) => {
-									startingTransfer = false;
-									if (result.type === "success") {
-										stageActionSuccess = "Data transfer started";
-									} else if (result.type === "failure" && result.data) {
-										stageActionError = result.data.error as string;
-									} else {
-										stageActionError = "Failed to start data transfer";
-									}
-								};
-							}}
-						>
-							<Button type="submit" variant="outline" disabled={startingTransfer || currentStage !== "Data Export"}>
-								{#if startingTransfer}
-									<LoaderIcon class="size-4 animate-spin" />
-									Transferring...
-								{:else}
-									Start Data Export
+					<div class="space-y-2 border-t pt-4">
+						<p class="font-medium text-sm">Configure data export for this booking</p>
+						<div class="flex items-center gap-3">
+							<form
+								method="POST"
+								action="?/setupDataExport&uuid={form.bookingUUID}"
+								use:enhance={() => {
+									startingTransfer = true;
+									setupDataExportResult = "idle";
+									setupDataExportMessage = "";
+									exportStats = null;
+									return async ({ result }) => {
+										startingTransfer = false;
+										if (result.type === "success" && result.data) {
+											setupDataExportResult = "success";
+											setupDataExportMessage = "Data export setup successfully";
+											exportStats = (result.data as { stats: Record<string, unknown> }).stats ?? null;
+										} else if (result.type === "failure" && result.data) {
+											setupDataExportResult = "error";
+											setupDataExportMessage = result.data.error as string;
+											setTimeout(() => { setupDataExportResult = "idle"; setupDataExportMessage = ""; }, 3000);
+										} else {
+											setupDataExportResult = "error";
+											setupDataExportMessage = "Failed to setup data export";
+											setTimeout(() => { setupDataExportResult = "idle"; setupDataExportMessage = ""; }, 3000);
+										}
+									};
+								}}
+							>
+								<Button
+									type="submit"
+									disabled={startingTransfer || currentStage !== "Data Export"}
+									variant={setupDataExportResult === "error" ? "destructive" : setupDataExportResult === "success" ? "default" : "outline"}
+									class="w-44 {setupDataExportResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
+								>
+									{#if startingTransfer}<LoaderIcon class="size-4 animate-spin" />{/if}
+									Setup Data Export
+								</Button>
+							</form>
+							{#if setupDataExportMessage && setupDataExportResult === "error"}
+								<span class="text-sm text-destructive">{setupDataExportMessage}</span>
+							{/if}
+						</div>
+						{#if exportStats}
+							<div class="bg-muted/50 rounded-md border px-4 py-3 space-y-1 text-sm">
+								<div>
+									<span class="text-muted-foreground">Total Number of Files:</span> <span class="font-medium">{exportStats.files}</span>
+								</div>
+								<div>
+									<span class="text-muted-foreground">Total Size:</span> <span class="font-medium">{exportStats.size_mb} MB</span>
+								</div>
+							</div>
+							<div class="space-y-2 pt-3">
+								<form
+									method="POST"
+									action="?/transfer&uuid={form.bookingUUID}"
+									use:enhance={() => {
+										transferring = true;
+										transferResult = "idle";
+										transferMessage = "";
+										transferProgress = 0;
+										setTimeout(() => { transferProgress = 85; }, 50);
+										return async ({ result }) => {
+											await new Promise(resolve => setTimeout(resolve, 3000));
+											transferring = false;
+											if (result.type === "success") {
+												transferProgress = 100;
+												transferResult = "success";
+											} else if (result.type === "failure" && result.data) {
+												transferProgress = 100;
+												transferResult = "error";
+												transferMessage = result.data.error as string;
+												setTimeout(() => { transferResult = "idle"; transferProgress = 0; transferMessage = ""; }, 3000);
+											} else {
+												transferProgress = 100;
+												transferResult = "error";
+												transferMessage = "Failed to start transfer";
+												setTimeout(() => { transferResult = "idle"; transferProgress = 0; transferMessage = ""; }, 3000);
+											}
+										};
+									}}
+								>
+									<Button
+										type="submit"
+										disabled={transferring || transferResult === "success" || currentStage !== "Data Export"}
+										variant={transferResult === "error" ? "destructive" : transferResult === "success" ? "default" : "outline"}
+										class="w-44 {transferResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
+									>
+										{#if transferring}
+											<LoaderIcon class="size-4 animate-spin" />
+											Transferring
+										{:else if transferResult === "success"}
+											Complete
+										{:else}
+											Start Transfer
+										{/if}
+									</Button>
+								</form>
+								{#if transferring || transferResult !== "idle"}
+									<Progress
+										value={transferProgress}
+										class="h-3 {transferResult === 'success' ? '[&>[data-slot=progress-indicator]]:bg-green-500' : transferResult === 'error' ? '[&>[data-slot=progress-indicator]]:bg-destructive' : ''}"
+									/>
 								{/if}
-							</Button>
-						</form>
+								{#if transferMessage}
+									<span class="text-sm text-destructive">{transferMessage}</span>
+								{/if}
+							</div>
+						{/if}
 					</div>
 
 					{#if currentStage === "Data Export"}
@@ -775,23 +949,40 @@
 								use:enhance={() => {
 									progressingStage = true;
 									stageActionError = "";
+									progressIngestResult = "idle";
 									return async ({ result }) => {
 										progressingStage = false;
 										if (result.type === "success") {
+											progressIngestResult = "success";
+											await new Promise(resolve => setTimeout(resolve, 600));
 											await invalidateAll();
+											progressIngestResult = "idle";
 										} else if (result.type === "failure" && result.data) {
 											stageActionError = result.data.error as string;
+											progressIngestResult = "error";
+											setTimeout(() => { progressIngestResult = "idle"; }, 3000);
 										} else {
 											stageActionError = "Failed to progress stage";
+											progressIngestResult = "error";
+											setTimeout(() => { progressIngestResult = "idle"; }, 3000);
 										}
 									};
 								}}
 							>
 								<input type="hidden" name="stage" value="Ingest" />
-								<Button type="submit" disabled={progressingStage}>
+								<Button
+									type="submit"
+									disabled={progressingStage}
+									variant={progressIngestResult === "error" ? "destructive" : "default"}
+									class={progressIngestResult === "success" ? "bg-green-600 hover:bg-green-600 text-white" : ""}
+								>
 									{#if progressingStage}
 										<LoaderIcon class="size-4 animate-spin" />
 										Progressing...
+									{:else if progressIngestResult === "success"}
+										Progressed!
+									{:else if progressIngestResult === "error"}
+										Failed
 									{:else}
 										Progress to Ingest
 									{/if}
@@ -844,7 +1035,7 @@
 			{:else}
 				<div class="space-y-4">
 					<p class="text-muted-foreground text-sm">
-						Send data to SciCat and finalize this booking
+						Send to data catalogue and finalize this booking
 					</p>
 
 					{#if stageActionError}
@@ -854,39 +1045,101 @@
 						<div class="text-sm text-green-600">{stageActionSuccess}</div>
 					{/if}
 
-					<div class="flex items-center gap-3">
+					<div class="space-y-3">
+						<div class="flex items-center gap-3">
 						<form
 							method="POST"
 							action="?/ingest&uuid={form.bookingUUID}"
-							use:enhance={() => {
+							use:enhance={({ formData }) => {
+								formData.set("payload", JSON.stringify(buildPayload()));
 								ingesting = true;
+								ingestStepsComplete = 0;
+								ingestDone = false;
+								ingestCatalogueUrl = "";
 								stageActionError = "";
 								stageActionSuccess = "";
 								return async ({ result }) => {
-									ingesting = false;
 									if (result.type === "success") {
-										stageActionSuccess = "Data ingested successfully";
-										await invalidateAll();
+										await new Promise(r => setTimeout(r, 800));
+										ingestStepsComplete = 1;
+										await new Promise(r => setTimeout(r, 900));
+										ingestStepsComplete = 2;
+										await new Promise(r => setTimeout(r, 700));
+										ingestStepsComplete = 3;
+										await new Promise(r => setTimeout(r, 600));
+										ingestStepsComplete = 4;
+										ingestDone = true;
+										ingestCatalogueUrl = "https://data-catalogue.example.com/datasets/placeholder-id";
 									} else if (result.type === "failure" && result.data) {
 										stageActionError = result.data.error as string;
 									} else {
 										stageActionError = "Failed to ingest";
 									}
+									ingesting = false;
 								};
 							}}
 						>
-							<Button type="submit" disabled={ingesting}>
+							<Button type="submit" disabled={ingesting || ingestDone}>
 								{#if ingesting}
 									<LoaderIcon class="size-4 animate-spin" />
 									Ingesting...
 								{:else}
-									Ingest to SciCat
+									Ingest to Data Catalogue
 								{/if}
 							</Button>
 						</form>
-						<form
-							method="POST"
-							action="?/progressStage&uuid={form.bookingUUID}"
+							<form
+								method="POST"
+								action="?/progressStage&uuid={form.bookingUUID}"
+								use:enhance={() => {
+									progressingStage = true;
+									stageActionError = "";
+									return async ({ result }) => {
+										progressingStage = false;
+										if (result.type === "success") {
+											await invalidateAll();
+										} else if (result.type === "failure" && result.data) {
+											stageActionError = result.data.error as string;
+										} else {
+											stageActionError = "Failed to progress stage";
+										}
+									};
+								}}
+							>
+								<input type="hidden" name="stage" value="Data Export" />
+								<Button type="submit" variant="outline" disabled={progressingStage}>
+									Revert to Data Export
+								</Button>
+							</form>
+						</div>
+						{#if ingesting || ingestStepsComplete > 0}
+							<div class="bg-muted/50 rounded-md border px-4 py-3 space-y-2 text-sm">
+								{#each [
+									"Processing metadata",
+									"Mapping to UKAEA Schema",
+									"Validating",
+									"Pushing to data catalogue",
+								] as step, i}
+									<div class="flex items-center gap-2">
+										{#if ingestStepsComplete > i}
+											<CircleCheckIcon class="size-4 text-green-500 shrink-0" />
+										{:else}
+											<LoaderIcon class="size-4 animate-spin text-muted-foreground shrink-0" />
+										{/if}
+										<span class={ingestStepsComplete > i ? "text-foreground" : "text-muted-foreground"}>{step}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+						{#if ingestDone}
+							<p class="text-sm text-muted-foreground">
+								Data ingestion complete: <a href={ingestCatalogueUrl} class="text-primary underline underline-offset-2">{ingestCatalogueUrl}</a>
+							</p>
+						{/if}
+					</div>
+					<form
+						method="POST"
+						action="?/progressStage&uuid={form.bookingUUID}"
 							use:enhance={() => {
 								progressingStage = true;
 								stageActionError = "";
@@ -908,7 +1161,6 @@
 							</Button>
 						</form>
 					</div>
-				</div>
 			{/if}
 		</Collapsible.Content>
 	</Collapsible.Root>

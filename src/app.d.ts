@@ -15,6 +15,7 @@ declare global {
 		}
 		interface PageData {
 			user?: User | null;
+			authEnabled?: boolean;
 		}
 		// interface PageState {}
 		// interface Platform {}

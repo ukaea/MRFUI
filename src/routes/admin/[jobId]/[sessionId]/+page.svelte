@@ -150,10 +150,10 @@
 						<dt class="text-muted-foreground">Booking End</dt>
 						<dd class="font-medium">{formatDate(booking.bookingEnd)}</dd>
 					</div>
-					{#if booking.modified}
+					{#if booking.spModified}
 						<div class="flex justify-between">
 							<dt class="text-muted-foreground">Last Modified</dt>
-							<dd class="font-medium">{formatDate(booking.modified)}</dd>
+							<dd class="font-medium">{formatDate(booking.spModified)}</dd>
 						</div>
 					{/if}
 				</dl>

@@ -122,7 +122,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 			// Authorisation: check group membership (JWT first, userinfo fallback)
 			if (authzEnabled && requiredGroup && event.locals.accessToken) {
 				const groups = await getUserGroups(event.locals.accessToken);
-				console.log("User groups:", groups);
 				if (!groupMatches(groups, requiredGroup)) {
 					throw error(403, `Access denied: you must be a member of the '${requiredGroup}' group.`);
 				}

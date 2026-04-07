@@ -28,7 +28,10 @@ export const MRFSchema = z.object({
 	tritium: z.boolean(),
 	beryllium: z.boolean(),
 	betaGamma: z.boolean(),
-	modified: z.string().optional(),
+	spModified: z.string().optional(),
+	spCreated: z.string().optional(),
+	dbCreatedAt: z.string().optional(),
+	dbUpdatedAt: z.string().optional(),
 	stage: z.enum(["Initial", "Data Export", "Ingest"]).default("Initial"),
 });
 

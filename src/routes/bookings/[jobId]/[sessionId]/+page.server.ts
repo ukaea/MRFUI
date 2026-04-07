@@ -405,7 +405,9 @@ export const actions: Actions = {
 		if (!jqResponse.ok) return fail(500, { error: `Failed to fetch JQ script: ${jqResponse.statusText}` });
 		const jqScript = await jqResponse.text();
 
-		const mapped = await jq.run(jqScript, JSON.parse(raw), { input: "json", output: "json" });
+		const mapped = await jq.run(jqScript, JSON.parse(raw), { input: "json", output: "json" }) as Record<string, unknown>;
+		mapped.accessGroups = ["HIVE"];
+		mapped.ownerGroup = "HIVE";
 		await savePayload(uuid, "2_mapped", mapped);
 
 		return { success: true, data: mapped };

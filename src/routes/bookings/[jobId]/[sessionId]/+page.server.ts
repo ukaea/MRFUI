@@ -5,6 +5,39 @@ import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
 import { writeFile, mkdir, stat, readdir, cp } from "node:fs/promises";
 import { join } from "node:path";
+import jq from "node-jq";
+
+const STRIP_FIELDS = new Set(["spModified", "spCreated", "status", "stage", "dbCreatedAt", "dbUpdatedAt"]);
+
+function removeEmpty(obj: unknown): unknown {
+	if (Array.isArray(obj)) {
+		return obj.map(removeEmpty).filter((v) => v !== null && v !== undefined && v !== "");
+	}
+	if (obj !== null && typeof obj === "object") {
+		const result: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+			if (v === null || v === undefined || v === "") continue;
+			if (Array.isArray(v) && v.length === 0) continue;
+			result[k] = removeEmpty(v);
+		}
+		return result;
+	}
+	return obj;
+}
+
+function normalise(payload: Record<string, unknown>): Record<string, unknown> {
+	const cleaned = removeEmpty(payload) as Record<string, unknown>;
+	for (const field of STRIP_FIELDS) delete cleaned[field];
+	if ("seid" in cleaned) { cleaned.seId = cleaned.seid; delete cleaned.seid; }
+	if ("seidDescription" in cleaned) { cleaned.seIdDescription = cleaned.seidDescription; delete cleaned.seidDescription; }
+	return cleaned;
+}
+
+async function savePayload(uuid: string, suffix: string, data: unknown): Promise<void> {
+	const payloadDir = join(process.cwd(), "payloads");
+	await mkdir(payloadDir, { recursive: true });
+	await writeFile(join(payloadDir, `${uuid}_${suffix}.json`), JSON.stringify(data, null, 2));
+}
 
 async function getFolderStats(folderPath: string): Promise<{ folders: number; files: number; size_mb: number }> {
 	let folders = 0;
@@ -343,6 +376,67 @@ export const actions: Actions = {
 		return { success: true, ...result };
 	},
 
+	processIngest: async ({ request, url }) => {
+		const uuid = url.searchParams.get("uuid");
+		if (!uuid) return fail(400, { error: "Missing booking UUID" });
+
+		const formData = await request.formData();
+		const raw = formData.get("payload") as string;
+		if (!raw) return fail(400, { error: "Missing payload" });
+
+		const normalised = normalise(JSON.parse(raw));
+		await savePayload(uuid, "1_normalised", normalised);
+
+		return { success: true, data: normalised };
+	},
+
+	mapIngest: async ({ request, url }) => {
+		const uuid = url.searchParams.get("uuid");
+		if (!uuid) return fail(400, { error: "Missing booking UUID" });
+
+		const jqUrl = env.INGEST_JQ_URL;
+		if (!jqUrl) return fail(500, { error: "INGEST_JQ_URL is not configured" });
+
+		const formData = await request.formData();
+		const raw = formData.get("data") as string;
+		if (!raw) return fail(400, { error: "Missing data" });
+
+		const jqResponse = await fetch(jqUrl);
+		if (!jqResponse.ok) return fail(500, { error: `Failed to fetch JQ script: ${jqResponse.statusText}` });
+		const jqScript = await jqResponse.text();
+
+		const mapped = await jq.run(jqScript, JSON.parse(raw), { input: "json", output: "json" });
+		await savePayload(uuid, "2_mapped", mapped);
+
+		return { success: true, data: mapped };
+	},
+
+	submitIngest: async ({ request, url, locals }) => {
+		const uuid = url.searchParams.get("uuid");
+		if (!uuid) return fail(400, { error: "Missing booking UUID" });
+
+		const metacatUrl = env.METACAT_URL;
+		if (!metacatUrl) return fail(500, { error: "METACAT_URL is not configured" });
+
+		const formData = await request.formData();
+		const raw = formData.get("data") as string;
+		if (!raw) return fail(400, { error: "Missing data" });
+
+		const response = await fetch(`${metacatUrl}/datasets`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...bearer(locals.accessToken) },
+			body: raw,
+		});
+
+		if (!response.ok) {
+			const text = await response.text();
+			return fail(response.status, { error: `Failed to ingest to data catalogue: ${text}` });
+		}
+
+		const result = await response.json();
+		return { success: true, data: result };
+	},
+
 	ingest: async ({ request, url }) => {
 		const uuid = url.searchParams.get("uuid");
 		if (!uuid) {
@@ -357,12 +451,11 @@ export const actions: Actions = {
 
 		const booking = JSON.parse(raw);
 
-		// Rename fields and set labId
+		// Rename fields
 		booking.seId = booking.seid;
 		delete booking.seid;
 		booking.seIdDescription = booking.seidDescription;
 		delete booking.seidDescription;
-		booking.labId = "MRF";
 
 		const payloadDir = join(process.cwd(), "payloads");
 		await mkdir(payloadDir, { recursive: true });

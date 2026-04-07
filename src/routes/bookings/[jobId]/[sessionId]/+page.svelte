@@ -8,7 +8,7 @@
 	import * as Select from "$lib/components/ui/select/index.js";
 	import { Checkbox } from "$lib/components/ui/checkbox/index.js";
 	import { Collapsible } from "bits-ui";
-	import { enhance } from "$app/forms";
+	import { enhance, deserialize } from "$app/forms";
 	import { invalidateAll } from "$app/navigation";
 	import ArrowLeftIcon from "@tabler/icons-svelte/icons/arrow-left";
 	import LoaderIcon from "@tabler/icons-svelte/icons/loader-2";
@@ -263,6 +263,10 @@
 								{#if fieldError('labLocation')}
 									<p class="text-destructive text-xs">{fieldError('labLocation')}</p>
 								{/if}
+							</div>
+							<div class="space-y-2">
+								<Label for="labId">Lab ID</Label>
+								<Input id="labId" bind:value={form.labId} placeholder="e.g. 0012" disabled={isDisabled} oninput={() => isDirty = true} />
 							</div>
 							<div class="space-y-2">
 								<Label for="workCategory">Work Category</Label>
@@ -1047,47 +1051,78 @@
 
 					<div class="space-y-3">
 						<div class="flex items-center gap-3">
-						<form
-							method="POST"
-							action="?/ingest&uuid={form.bookingUUID}"
-							use:enhance={({ formData }) => {
-								formData.set("payload", JSON.stringify(buildPayload()));
+						<Button
+							disabled={ingesting || ingestDone}
+							onclick={async () => {
 								ingesting = true;
 								ingestStepsComplete = 0;
 								ingestDone = false;
 								ingestCatalogueUrl = "";
 								stageActionError = "";
-								stageActionSuccess = "";
-								return async ({ result }) => {
-									if (result.type === "success") {
-										await new Promise(r => setTimeout(r, 800));
-										ingestStepsComplete = 1;
-										await new Promise(r => setTimeout(r, 900));
-										ingestStepsComplete = 2;
-										await new Promise(r => setTimeout(r, 700));
-										ingestStepsComplete = 3;
-										await new Promise(r => setTimeout(r, 600));
-										ingestStepsComplete = 4;
-										ingestDone = true;
-										ingestCatalogueUrl = "https://data-catalogue.example.com/datasets/placeholder-id";
-									} else if (result.type === "failure" && result.data) {
-										stageActionError = result.data.error as string;
-									} else {
-										stageActionError = "Failed to ingest";
-									}
+
+								// Step 1: Process
+								const fd1 = new FormData();
+								fd1.set("payload", JSON.stringify(buildPayload()));
+								const processRes = await fetch(`?/processIngest&uuid=${form.bookingUUID}`, {
+									method: "POST",
+									body: fd1,
+								});
+								const processResult = deserialize(await processRes.text());
+								if (processResult.type === "failure" || processResult.type === "error") {
+									stageActionError = (processResult.type === "failure" ? processResult.data?.error : processResult.error?.message) ?? "Processing failed";
 									ingesting = false;
-								};
+									return;
+								}
+								const normalised = ((processResult as unknown) as { type: "success"; data: { data: unknown } }).data?.data;
+								ingestStepsComplete = 1;
+
+								// Step 2: Map
+								const fd2 = new FormData();
+								fd2.set("data", JSON.stringify(normalised));
+								const mapRes = await fetch(`?/mapIngest&uuid=${form.bookingUUID}`, {
+									method: "POST",
+									body: fd2,
+								});
+								const mapResult = deserialize(await mapRes.text());
+								if (mapResult.type === "failure" || mapResult.type === "error") {
+									stageActionError = (mapResult.type === "failure" ? mapResult.data?.error : mapResult.error?.message) ?? "Mapping failed";
+									ingesting = false;
+									return;
+								}
+								const mapped = ((mapResult as unknown) as { type: "success"; data: { data: unknown } }).data?.data;
+								ingestStepsComplete = 2;
+
+								// Step 3: Validating (dummy)
+								await new Promise(r => setTimeout(r, 700));
+								ingestStepsComplete = 3;
+
+								// Step 4: Ingest to data catalogue
+								const fd3 = new FormData();
+								fd3.set("data", JSON.stringify(mapped));
+								const submitRes = await fetch(`?/submitIngest&uuid=${form.bookingUUID}`, {
+									method: "POST",
+									body: fd3,
+								});
+								const submitResult = deserialize(await submitRes.text());
+								if (submitResult.type === "failure" || submitResult.type === "error") {
+									stageActionError = (submitResult.type === "failure" ? submitResult.data?.error : submitResult.error?.message) ?? "Ingestion failed";
+									ingesting = false;
+									return;
+								}
+								const submitData = ((submitResult as unknown) as { type: "success"; data: { data: unknown } }).data?.data;
+								ingestStepsComplete = 4;
+								ingestDone = true;
+								ingestCatalogueUrl = (submitData as { url?: string })?.url ?? `${form.bookingUUID}`;
+								ingesting = false;
 							}}
 						>
-							<Button type="submit" disabled={ingesting || ingestDone}>
-								{#if ingesting}
-									<LoaderIcon class="size-4 animate-spin" />
-									Ingesting...
-								{:else}
-									Ingest to Data Catalogue
-								{/if}
-							</Button>
-						</form>
+							{#if ingesting}
+								<LoaderIcon class="size-4 animate-spin" />
+								Ingesting...
+							{:else}
+								Ingest to Data Catalogue
+							{/if}
+						</Button>
 							<form
 								method="POST"
 								action="?/progressStage&uuid={form.bookingUUID}"
@@ -1115,10 +1150,10 @@
 						{#if ingesting || ingestStepsComplete > 0}
 							<div class="bg-muted/50 rounded-md border px-4 py-3 space-y-2 text-sm">
 								{#each [
-									"Processing metadata",
-									"Mapping to UKAEA Schema",
+									"Processing",
+									"Mapping",
 									"Validating",
-									"Pushing to data catalogue",
+									"Ingesting",
 								] as step, i}
 									<div class="flex items-center gap-2">
 										{#if ingestStepsComplete > i}
@@ -1137,30 +1172,7 @@
 							</p>
 						{/if}
 					</div>
-					<form
-						method="POST"
-						action="?/progressStage&uuid={form.bookingUUID}"
-							use:enhance={() => {
-								progressingStage = true;
-								stageActionError = "";
-								return async ({ result }) => {
-									progressingStage = false;
-									if (result.type === "success") {
-										await invalidateAll();
-									} else if (result.type === "failure" && result.data) {
-										stageActionError = result.data.error as string;
-									} else {
-										stageActionError = "Failed to progress stage";
-									}
-								};
-							}}
-						>
-							<input type="hidden" name="stage" value="Data Export" />
-							<Button type="submit" variant="outline" disabled={progressingStage}>
-								Revert to Data Export
-							</Button>
-						</form>
-					</div>
+				</div>
 			{/if}
 		</Collapsible.Content>
 	</Collapsible.Root>

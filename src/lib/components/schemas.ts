@@ -9,6 +9,7 @@ const userSchema = z.object({
 export const MRFSchema = z.object({
 	bookingUUID: z.uuid(),
 	labLocation: z.string().min(1, "Lab location is required").default("MRF"),
+	labId: z.string().optional(),
 	seid: z.string().min(1, "SEID is required"),
 	seidDescription: z.string().optional(),
 	jobId: z.string().min(1, "Job ID is required"),

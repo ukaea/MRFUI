@@ -1,4 +1,4 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const userSchema = z.object({
 	firstName: z.string().min(1, "First name is required"),
@@ -9,6 +9,7 @@ const userSchema = z.object({
 export const MRFSchema = z.object({
 	bookingUUID: z.uuid(),
 	labLocation: z.string().min(1, "Lab location is required").default("MRF"),
+	labId: z.string().optional(),
 	seid: z.string().min(1, "SEID is required"),
 	seidDescription: z.string().optional(),
 	jobId: z.string().min(1, "Job ID is required"),
@@ -28,7 +29,10 @@ export const MRFSchema = z.object({
 	tritium: z.boolean(),
 	beryllium: z.boolean(),
 	betaGamma: z.boolean(),
-	modified: z.string().optional(),
+	spModified: z.string().optional(),
+	spCreated: z.string().optional(),
+	dbCreatedAt: z.string().optional(),
+	dbUpdatedAt: z.string().optional(),
 	stage: z.enum(["Initial", "Data Export", "Ingest"]).default("Initial"),
 });
 

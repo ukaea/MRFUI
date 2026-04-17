@@ -1,7 +1,6 @@
 <script lang="ts">
 	import CameraIcon from "@tabler/icons-svelte/icons/camera";
 	import ChartBarIcon from "@tabler/icons-svelte/icons/chart-bar";
-	import DashboardIcon from "@tabler/icons-svelte/icons/dashboard";
 	import DatabaseIcon from "@tabler/icons-svelte/icons/database";
 	import FileAiIcon from "@tabler/icons-svelte/icons/file-ai";
 	import FileDescriptionIcon from "@tabler/icons-svelte/icons/file-description";
@@ -23,16 +22,7 @@
 	import type { ComponentProps } from "svelte";
 
 	const data = {
-		user: {
-			name: "MRF RO",
-			email: "mrfro@ukaea.uk",
-		},
 		navMain: [
-			{
-				title: "Dashboard",
-				url: "/dashboard",
-				icon: DashboardIcon,
-			},
 			{
 				title: "Bookings",
 				url: "/bookings",
@@ -75,7 +65,7 @@
 		<NavSecondary items={data.navSecondary} class="mt-auto" />
 	</Sidebar.Content>
 	<Sidebar.Footer>
-		<NavUser user={data.user} />
+		<NavUser />
 	</Sidebar.Footer>
 	<Sidebar.Rail />
 </Sidebar.Root>

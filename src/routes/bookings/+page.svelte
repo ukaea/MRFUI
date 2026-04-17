@@ -2,32 +2,64 @@
 	import DataTable from "$lib/components/data-table.svelte";
 	import { Button } from "$lib/components/ui/button/index.js";
 	import Input from "$lib/components/ui/input/input.svelte";
-	import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
-	import LoaderIcon from "@tabler/icons-svelte/icons/loader-2";
+	import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
 	import SearchIcon from "@tabler/icons-svelte/icons/search";
 	import XIcon from "@tabler/icons-svelte/icons/x";
-	import { enhance } from "$app/forms";
 	import { goto } from "$app/navigation";
-    import Book from "@tabler/icons-svelte/icons/book";
+	import { page } from "$app/state";
 
 	let { data } = $props();
 
-	let syncing = $state(false);
-	let syncMessage = $state("");
 	let searchValue = $state(data.search ?? "");
+	let viewMode = $state<string>(data.view ?? "mine");
+
+	let authEnabled = $derived(page.data.authEnabled ?? false);
+	let userEmail = $derived(page.data.user?.email?.toLowerCase() ?? "");
+	let canFilter = $derived(authEnabled && !!userEmail);
+
+	let filteredBookings = $derived(
+		canFilter && viewMode === "mine"
+			? data.bookings.filter((b) =>
+					Array.isArray(b.scientificSupport) &&
+					b.scientificSupport.some(
+						(u) => u.email?.toLowerCase() === userEmail,
+					),
+				)
+			: data.bookings,
+	);
+
+	// $effect(() => {
+	// 	console.log("Filtered bookings:", filteredBookings);
+	// });
+
+	let filteredPagination = $derived(
+		canFilter && viewMode === "mine"
+			? {
+					page: 1,
+					pageSize: filteredBookings.length || 10,
+					total: filteredBookings.length,
+					totalPages: 1,
+				}
+			: data.pagination,
+	);
+
+	function switchView(newView: string) {
+		viewMode = newView;
+		goto(`/bookings?view=${newView}`);
+	}
 
 	function submitSearch() {
 		const trimmed = searchValue.trim();
 		if (trimmed) {
-			goto(`/bookings?search=${encodeURIComponent(trimmed)}`);
+			goto(`/bookings?search=${encodeURIComponent(trimmed)}&view=${viewMode}`);
 		} else {
-			goto("/bookings");
+			goto(`/bookings?view=${viewMode}`);
 		}
 	}
 
 	function clearSearch() {
 		searchValue = "";
-		goto("/bookings");
+		goto(`/bookings?view=${viewMode}`);
 	}
 </script>
 
@@ -67,40 +99,11 @@
 			</div>
 			<Button variant="outline" onclick={submitSearch}>Search</Button>
 		</div>
-		<div class="flex items-center gap-3">
-			{#if syncMessage}
-				<span class="text-muted-foreground text-sm">{syncMessage}</span>
-			{/if}
-			<form
-				method="POST"
-				action="?/sync"
-				use:enhance={() => {
-					syncing = true;
-					syncMessage = "";
-					return async ({ result }) => {
-						syncing = false;
-						if (result.type === "success" && result.data) {
-							syncMessage = `Synced ${result.data.records_synced} records`;
-						} else if (result.type === "failure" && result.data) {
-							syncMessage = result.data.error as string;
-						} else {
-							syncMessage = "Sync failed";
-						}
-					};
-				}}
-			>
-				<Button type="submit" variant="outline" disabled={syncing}>
-					{#if syncing}
-						<LoaderIcon class="size-4 animate-spin" />
-						Syncing...
-					{:else}
-						<RefreshIcon class="size-4" />
-						Sync Bookings
-					{/if}
-				</Button>
-			</form>
-		</div>
+		<ToggleGroup.Root type="single" value={viewMode} onValueChange={(v) => { if (v) switchView(v); }} variant="outline">
+			<ToggleGroup.Item value="mine">My Bookings</ToggleGroup.Item>
+			<ToggleGroup.Item value="all">All Bookings</ToggleGroup.Item>
+		</ToggleGroup.Root>
 	</div>
 
-	<DataTable data={data.bookings} serverPagination={data.pagination} />
+	<DataTable data={filteredBookings} serverPagination={filteredPagination} />
 </div>

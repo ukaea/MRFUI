@@ -39,10 +39,11 @@ async function savePayload(uuid: string, suffix: string, data: unknown): Promise
 	await writeFile(join(payloadDir, `${uuid}_${suffix}.json`), JSON.stringify(data, null, 2));
 }
 
-async function getFolderStats(folderPath: string): Promise<{ folders: number; files: number; size_mb: number }> {
+async function getFolderStats(folderPath: string): Promise<{ folders: number; files: number; size_mb: number; fileNames: string[] }> {
 	let folders = 0;
 	let files = 0;
 	let totalBytes = 0;
+	const fileNames: string[] = [];
 
 	async function walk(dir: string) {
 		const entries = await readdir(dir, { withFileTypes: true });
@@ -53,6 +54,7 @@ async function getFolderStats(folderPath: string): Promise<{ folders: number; fi
 				await walk(fullPath);
 			} else if (entry.isFile()) {
 				files++;
+				fileNames.push(entry.name);
 				const info = await stat(fullPath);
 				totalBytes += info.size;
 			}
@@ -60,7 +62,7 @@ async function getFolderStats(folderPath: string): Promise<{ folders: number; fi
 	}
 
 	await walk(folderPath);
-	return { folders, files, size_mb: Math.round(totalBytes / (1024 ** 2) * 10) / 10 };
+	return { folders, files, size_mb: Math.round(totalBytes / (1024 ** 2) * 10) / 10, fileNames };
 }
 
 function bearer(token: string | null): Record<string, string> {
@@ -435,8 +437,14 @@ export const actions: Actions = {
 			return fail(response.status, { error: `Failed to ingest to data catalogue: ${text}` });
 		}
 
-		const result = await response.json();
-		return { success: true, data: result };
+		const result = await response.json() as Record<string, unknown>;
+		const scicatUrl = env.SCICAT_URL;
+		const datasetId = result.pid ?? result.id ?? result._id;
+		const catalogueUrl = scicatUrl && datasetId
+			? `${scicatUrl}/datasets/${encodeURIComponent(String(datasetId))}`
+			: undefined;
+
+		return { success: true, data: result, catalogueUrl };
 	},
 
 	ingest: async ({ request, url }) => {

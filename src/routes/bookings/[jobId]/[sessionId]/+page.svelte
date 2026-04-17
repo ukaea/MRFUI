@@ -26,11 +26,43 @@
 
 	let { data } = $props();
 
+	function withDefaults(booking: Partial<MRFSchemaType>): MRFSchemaType {
+		return {
+			bookingUUID:      booking.bookingUUID      ?? "",
+			labLocation:      booking.labLocation      ?? "",
+			labId:            booking.labId            ?? "",
+			seid:             booking.seid             ?? "",
+			seidDescription:  booking.seidDescription  ?? "",
+			jobId:            booking.jobId            ?? "",
+			sessionId:        booking.sessionId        ?? "",
+			sampleId:         booking.sampleId         ?? [],
+			bookingStart:     booking.bookingStart     ?? "",
+			bookingEnd:       booking.bookingEnd       ?? "",
+			internalUser:     booking.internalUser     ?? [],
+			externalUser:     booking.externalUser     ?? [],
+			institution:      booking.institution      ?? "",
+			scientificSupport: booking.scientificSupport ?? [],
+			notes:            booking.notes            ?? "",
+			workCategory:     booking.workCategory     ?? "",
+			status:           booking.status           ?? "",
+			sampleSplit:      booking.sampleSplit      ?? false,
+			splitSampleId:    booking.splitSampleId    ?? [],
+			tritium:          booking.tritium          ?? false,
+			beryllium:        booking.beryllium        ?? false,
+			betaGamma:        booking.betaGamma        ?? false,
+			spModified:       booking.spModified       ?? "",
+			spCreated:        booking.spCreated        ?? "",
+			dbCreatedAt:      booking.dbCreatedAt      ?? "",
+			dbUpdatedAt:      booking.dbUpdatedAt      ?? "",
+			stage:            booking.stage            ?? "Initial",
+		};
+	}
+
 	// Create editable form state from the booking data
-	let form = $state<MRFSchemaType>({ ...data.booking });
+	let form = $state<MRFSchemaType>(withDefaults(data.booking));
 
 	// Track if form has been modified
-	let isDirty = $derived(JSON.stringify(form) !== JSON.stringify(data.booking));
+	let isDirty = $derived(JSON.stringify(form) !== JSON.stringify(withDefaults(data.booking)));
 
 	let saving = $state(false);
 	let saveError = $state("");
@@ -60,7 +92,7 @@
 	// Re-sync form and collapsible states when server data changes (e.g. after stage progression)
 	$effect(() => {
 		if (data.booking.stage !== form.stage) {
-			form = { ...data.booking };
+			form = withDefaults(data.booking);
 		}
 	});
 
@@ -86,6 +118,7 @@
 	let transferResult = $state<"idle" | "success" | "error">("idle");
 	let transferMessage = $state("");
 	let transferProgress = $state(0);
+	let transferCurrentFile = $state("");
 	let ingesting = $state(false);
 	let ingestStepsComplete = $state(0); // 0 = not started, 1-4 = steps done
 	let ingestDone = $state(false);
@@ -145,7 +178,7 @@
 	}
 
 	function handleCancel() {
-		form = { ...data.booking };
+		form = withDefaults(data.booking);
 		saveError = "";
 		fieldErrors = {};
 	}
@@ -170,6 +203,35 @@
 
 	function fieldError(path: string): string | undefined {
 		return fieldErrors[path];
+	}
+
+	function inputErrorClass(path: string): string {
+		return fieldErrors[path] ? "border-destructive focus-visible:ring-destructive" : "";
+	}
+
+	const FIELD_LABELS: Record<string, string> = {
+		seid: "SEID",
+		labLocation: "Lab Location",
+		workCategory: "Work Category",
+		status: "Status",
+		bookingStart: "Booking Start",
+		bookingEnd: "Booking End",
+		"internalUser.0.firstName": "Internal User — First Name",
+		"internalUser.0.lastName": "Internal User — Last Name",
+		"internalUser.0.email": "Internal User — Email",
+		"externalUser.0.firstName": "External User — First Name",
+		"externalUser.0.lastName": "External User — Last Name",
+		"externalUser.0.email": "External User — Email",
+		"scientificSupport.0.firstName": "Scientific Support — First Name",
+		"scientificSupport.0.lastName": "Scientific Support — Last Name",
+		"scientificSupport.0.email": "Scientific Support — Email",
+	};
+
+	function fieldLabel(key: string): string {
+		if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+		const m = key.match(/^sampleId\.(\d+)$/);
+		if (m) return `Sample ID ${+m[1] + 1}`;
+		return key;
 	}
 
 	function getStatusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -248,7 +310,7 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="seid">SEID</Label>
-								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={isDisabled} />
+								<Input id="seid" bind:value={form.seid} placeholder="e.g. 1001" disabled={isDisabled} class={inputErrorClass('seid')} />
 								{#if fieldError('seid')}
 									<p class="text-destructive text-xs">{fieldError('seid')}</p>
 								{/if}
@@ -259,7 +321,7 @@
 							</div>
 							<div class="space-y-2">
 								<Label for="labLocation">Lab Location</Label>
-								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={isDisabled} />
+								<Input id="labLocation" bind:value={form.labLocation} placeholder="e.g. MRF" disabled={isDisabled} class={inputErrorClass('labLocation')} />
 								{#if fieldError('labLocation')}
 									<p class="text-destructive text-xs">{fieldError('labLocation')}</p>
 								{/if}
@@ -271,7 +333,7 @@
 							<div class="space-y-2">
 								<Label for="workCategory">Work Category</Label>
 								<Select.Root type="single" bind:value={form.workCategory} disabled={isDisabled}>
-									<Select.Trigger id="workCategory" class="w-full">
+									<Select.Trigger id="workCategory" class="w-full {inputErrorClass('workCategory')}">
 										{form.workCategory}
 									</Select.Trigger>
 									<Select.Content>
@@ -289,7 +351,7 @@
 							<div class="space-y-2">
 								<Label for="status">Status</Label>
 								<Select.Root type="single" bind:value={form.status} disabled={isDisabled}>
-									<Select.Trigger id="status" class="w-full">
+									<Select.Trigger id="status" class="w-full {inputErrorClass('status')}">
 										<Badge variant={getStatusVariant(form.status)}>{form.status}</Badge>
 									</Select.Trigger>
 									<Select.Content>
@@ -321,6 +383,7 @@
 								value={toDateTimeLocal(form.bookingStart)}
 								oninput={(e) => form.bookingStart = fromDateTimeLocal(e.currentTarget.value)}
 								disabled={isDisabled}
+								class={inputErrorClass('bookingStart')}
 							/>
 							{#if fieldError('bookingStart')}
 								<p class="text-destructive text-xs">{fieldError('bookingStart')}</p>
@@ -334,6 +397,7 @@
 								value={toDateTimeLocal(form.bookingEnd)}
 								oninput={(e) => form.bookingEnd = fromDateTimeLocal(e.currentTarget.value)}
 								disabled={isDisabled}
+								class={inputErrorClass('bookingEnd')}
 							/>
 							{#if fieldError('bookingEnd')}
 								<p class="text-destructive text-xs">{fieldError('bookingEnd')}</p>
@@ -357,6 +421,7 @@
 											oninput={(e) => updateListItem('sampleId', i, e.currentTarget.value)}
 											placeholder="Sample ID"
 											disabled={isDisabled}
+											class={inputErrorClass(`sampleId.${i}`)}
 										/>
 										{#if !isDisabled}
 											<Button variant="ghost" size="icon" class="shrink-0" onclick={() => removeFromList('sampleId', i)}>
@@ -463,6 +528,7 @@
 									value={user?.firstName ?? ""}
 									oninput={(e) => updateUser('internalUser', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('internalUser.0.firstName')}
 								/>
 								{#if fieldError('internalUser.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('internalUser.0.firstName')}</p>
@@ -475,6 +541,7 @@
 									value={user?.lastName ?? ""}
 									oninput={(e) => updateUser('internalUser', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('internalUser.0.lastName')}
 								/>
 								{#if fieldError('internalUser.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('internalUser.0.lastName')}</p>
@@ -489,6 +556,7 @@
 								value={user?.email ?? ""}
 								oninput={(e) => updateUser('internalUser', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
+								class={inputErrorClass('internalUser.0.email')}
 							/>
 							{#if fieldError('internalUser.0.email')}
 								<p class="text-destructive text-xs">{fieldError('internalUser.0.email')}</p>
@@ -511,6 +579,7 @@
 									value={user?.firstName ?? ""}
 									oninput={(e) => updateUser('externalUser', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('externalUser.0.firstName')}
 								/>
 								{#if fieldError('externalUser.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('externalUser.0.firstName')}</p>
@@ -523,6 +592,7 @@
 									value={user?.lastName ?? ""}
 									oninput={(e) => updateUser('externalUser', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('externalUser.0.lastName')}
 								/>
 								{#if fieldError('externalUser.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('externalUser.0.lastName')}</p>
@@ -537,6 +607,7 @@
 								value={user?.email ?? ""}
 								oninput={(e) => updateUser('externalUser', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
+								class={inputErrorClass('externalUser.0.email')}
 							/>
 							{#if fieldError('externalUser.0.email')}
 								<p class="text-destructive text-xs">{fieldError('externalUser.0.email')}</p>
@@ -567,6 +638,7 @@
 									value={user?.firstName ?? ""}
 									oninput={(e) => updateUser('scientificSupport', 'firstName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('scientificSupport.0.firstName')}
 								/>
 								{#if fieldError('scientificSupport.0.firstName')}
 									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.firstName')}</p>
@@ -579,6 +651,7 @@
 									value={user?.lastName ?? ""}
 									oninput={(e) => updateUser('scientificSupport', 'lastName', e.currentTarget.value)}
 									disabled={isDisabled}
+									class={inputErrorClass('scientificSupport.0.lastName')}
 								/>
 								{#if fieldError('scientificSupport.0.lastName')}
 									<p class="text-destructive text-xs">{fieldError('scientificSupport.0.lastName')}</p>
@@ -593,6 +666,7 @@
 								value={user?.email ?? ""}
 								oninput={(e) => updateUser('scientificSupport', 'email', e.currentTarget.value)}
 								disabled={isDisabled}
+								class={inputErrorClass('scientificSupport.0.email')}
 							/>
 							{#if fieldError('scientificSupport.0.email')}
 								<p class="text-destructive text-xs">{fieldError('scientificSupport.0.email')}</p>
@@ -617,6 +691,16 @@
 			</div>
 
 			{#if currentStage === "Initial"}
+				{#if Object.keys(fieldErrors).length > 0}
+					<div class="mx-6 mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive space-y-1.5">
+						<p class="font-medium">Fix the following fields before progressing:</p>
+						<ul class="list-disc list-inside space-y-0.5">
+							{#each Object.entries(fieldErrors) as [key, message]}
+								<li><span class="font-medium">{fieldLabel(key)}</span> — {message}</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
 				<div class="flex justify-between gap-2 border-t px-6 py-4">
 					<form
 						method="POST"
@@ -697,7 +781,7 @@
 										fieldErrors = {};
 										saveResult = "success";
 										await invalidateAll();
-										form = { ...data.booking };
+										form = withDefaults(data.booking);
 										setTimeout(() => { saveResult = "idle"; }, 2000);
 									} else if (result.type === "failure" && result.data) {
 										saveError = result.data.error as string;
@@ -878,13 +962,29 @@
 							{/if}
 						</div>
 						{#if exportStats}
-							<div class="bg-muted/50 rounded-md border px-4 py-3 space-y-1 text-sm">
-								<div>
-									<span class="text-muted-foreground">Total Number of Files:</span> <span class="font-medium">{exportStats.files}</span>
+							<div class="bg-muted/50 rounded-md border px-4 py-3 text-sm flex gap-6">
+								<div class="space-y-1 shrink-0">
+									<div>
+										<span class="text-muted-foreground">Total Number of Files:</span> <span class="font-medium">{exportStats.files}</span>
+									</div>
+									<div>
+										<span class="text-muted-foreground">Total Size:</span> <span class="font-medium">{exportStats.size_mb} MB</span>
+									</div>
 								</div>
-								<div>
-									<span class="text-muted-foreground">Total Size:</span> <span class="font-medium">{exportStats.size_mb} MB</span>
-								</div>
+								{#if (exportStats.fileNames as string[])?.length}
+									{@const allFiles = exportStats.fileNames as string[]}
+									{@const MAX = 14}
+									{@const hasMore = allFiles.length > MAX}
+									{@const displayed = hasMore ? [...allFiles.slice(0, MAX), "…"] : allFiles}
+									<div class="border-l pl-6 min-w-0">
+										<p class="text-muted-foreground mb-1">Files</p>
+										<div class="grid grid-flow-col grid-rows-5 gap-x-8 gap-y-0.5 font-mono">
+											{#each displayed as name}
+												<span class="truncate {name === '…' ? 'text-muted-foreground' : ''}">{name}</span>
+											{/each}
+										</div>
+									</div>
+								{/if}
 							</div>
 							<div class="space-y-2 pt-3">
 								<form
@@ -895,9 +995,25 @@
 										transferResult = "idle";
 										transferMessage = "";
 										transferProgress = 0;
+										transferCurrentFile = "";
 										setTimeout(() => { transferProgress = 85; }, 50);
+
+										// Cycle through known filenames while transferring
+										const files = (exportStats?.fileNames as string[] | undefined) ?? [];
+										let fileIdx = 0;
+										let fileInterval: ReturnType<typeof setInterval> | undefined;
+										if (files.length > 0) {
+											transferCurrentFile = files[0];
+											fileInterval = setInterval(() => {
+												fileIdx = (fileIdx + 1) % files.length;
+												transferCurrentFile = files[fileIdx];
+											}, Math.max(200, 3000 / files.length));
+										}
+
 										return async ({ result }) => {
 											await new Promise(resolve => setTimeout(resolve, 3000));
+											clearInterval(fileInterval);
+											transferCurrentFile = "";
 											transferring = false;
 											if (result.type === "success") {
 												transferProgress = 100;
@@ -937,6 +1053,11 @@
 										value={transferProgress}
 										class="h-3 {transferResult === 'success' ? '[&>[data-slot=progress-indicator]]:bg-green-500' : transferResult === 'error' ? '[&>[data-slot=progress-indicator]]:bg-destructive' : ''}"
 									/>
+								{/if}
+								{#if transferring && transferCurrentFile}
+									<div class="bg-muted/50 rounded-md border px-3 py-2 text-sm font-mono text-muted-foreground truncate">
+										{transferCurrentFile}
+									</div>
 								{/if}
 								{#if transferMessage}
 									<span class="text-sm text-destructive">{transferMessage}</span>
@@ -1012,7 +1133,7 @@
 							>
 								<input type="hidden" name="stage" value="Initial" />
 								<Button type="submit" variant="outline" disabled={progressingStage}>
-									Revert to Initial
+									Back to Initial
 								</Button>
 							</form>
 						</div>
@@ -1041,6 +1162,11 @@
 					<p class="text-muted-foreground text-sm">
 						Send to data catalogue and finalize this booking
 					</p>
+
+					<div class="bg-muted/50 rounded-md border">
+						<p class="text-xs text-muted-foreground px-4 pt-3 pb-1 font-medium">Raw payload</p>
+						<pre class="px-4 pb-3 text-xs overflow-auto max-h-[32rem]">{JSON.stringify(buildPayload(), null, 2)}</pre>
+					</div>
 
 					{#if stageActionError}
 						<div class="text-destructive text-sm">{stageActionError}</div>
@@ -1109,10 +1235,10 @@
 									ingesting = false;
 									return;
 								}
-								const submitData = ((submitResult as unknown) as { type: "success"; data: { data: unknown } }).data?.data;
+								const submitData = ((submitResult as unknown) as { type: "success"; data: { data: unknown; catalogueUrl?: string } }).data;
 								ingestStepsComplete = 4;
 								ingestDone = true;
-								ingestCatalogueUrl = (submitData as { url?: string })?.url ?? `${form.bookingUUID}`;
+								ingestCatalogueUrl = submitData?.catalogueUrl ?? "";
 								ingesting = false;
 							}}
 						>
@@ -1143,7 +1269,7 @@
 							>
 								<input type="hidden" name="stage" value="Data Export" />
 								<Button type="submit" variant="outline" disabled={progressingStage}>
-									Revert to Data Export
+									Back to Data Export
 								</Button>
 							</form>
 						</div>
@@ -1168,7 +1294,12 @@
 						{/if}
 						{#if ingestDone}
 							<p class="text-sm text-muted-foreground">
-								Data ingestion complete: <a href={ingestCatalogueUrl} class="text-primary underline underline-offset-2">{ingestCatalogueUrl}</a>
+								Data ingestion complete:
+							{#if ingestCatalogueUrl}
+								<a href={ingestCatalogueUrl} class="text-primary underline underline-offset-2">{ingestCatalogueUrl}</a>
+							{:else}
+								<span class="text-muted-foreground italic">URL unavailable</span>
+							{/if}
 							</p>
 						{/if}
 					</div>

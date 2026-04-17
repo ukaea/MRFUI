@@ -3,7 +3,7 @@ import { genericOAuth, keycloak } from "better-auth/plugins";
 import { env } from "$env/dynamic/private";
 
 export const auth = betterAuth({
-	secret: env.BETTER_AUTH_SECRET,
+	secret: env.BETTER_AUTH_SECRET ?? "build-time-placeholder",
 	baseURL: env.BETTER_AUTH_URL || "http://localhost:5173",
 	plugins: [
 		genericOAuth({

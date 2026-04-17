@@ -1,4 +1,4 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 
 const userSchema = z.object({
 	firstName: z.string().min(1, "First name is required"),

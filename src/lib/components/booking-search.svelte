@@ -9,7 +9,6 @@
 	import Input from "$lib/components/ui/input/input.svelte";
 	import * as Select from "$lib/components/ui/select/index.js";
 	import SearchIcon from "@tabler/icons-svelte/icons/search";
-	import FilterIcon from "@tabler/icons-svelte/icons/adjustments-horizontal";
 	import XIcon from "@tabler/icons-svelte/icons/x";
 	import {
 		FILTERS,
@@ -32,8 +31,6 @@
 	const ANY = "__any";
 	const uid = $props.id();
 	const formId = `booking-search-${uid}`;
-	const primaryFilters = FILTERS.filter((f) => f.primary);
-	const advancedFilters = FILTERS.filter((f) => !f.primary);
 
 	// Draft values being edited; reset whenever the applied filters change
 	// (e.g. after navigating, removing a chip, or using the back button).
@@ -43,10 +40,6 @@
 	});
 
 	let activeEntries = $derived(Object.entries(filters));
-	let advancedActiveCount = $derived(
-		advancedFilters.filter((f) => filters[f.key]).length,
-	);
-	let showAdvanced = $state(untrack(() => advancedActiveCount > 0));
 
 	function navigate(next: BookingFilters) {
 		const params = new URLSearchParams(page.url.searchParams);
@@ -87,20 +80,10 @@
 <div class="flex flex-col gap-3 px-4 lg:px-6">
 	<form id={formId} class="flex flex-col gap-3" onsubmit={submit}>
 		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-			{#each primaryFilters as def (def.key)}
+			{#each FILTERS as def (def.key)}
 				{@render field(def)}
 			{/each}
 		</div>
-
-		{#if showAdvanced}
-			<div
-				class="bg-muted/30 grid grid-cols-1 gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4"
-			>
-				{#each advancedFilters as def (def.key)}
-					{@render field(def)}
-				{/each}
-			</div>
-		{/if}
 	</form>
 
 	<div class="flex flex-wrap items-center justify-between gap-2">
@@ -108,18 +91,6 @@
 			<Button type="submit" form={formId}>
 				<SearchIcon class="size-4" />
 				Search
-			</Button>
-			<Button
-				type="button"
-				variant="outline"
-				aria-expanded={showAdvanced}
-				onclick={() => (showAdvanced = !showAdvanced)}
-			>
-				<FilterIcon class="size-4" />
-				{showAdvanced ? "Fewer filters" : "More filters"}
-				{#if advancedActiveCount > 0}
-					<Badge variant="secondary" class="ml-1">{advancedActiveCount}</Badge>
-				{/if}
 			</Button>
 			{#if activeEntries.length > 0}
 				<Button type="button" variant="ghost" onclick={clearAll}>Clear all</Button>

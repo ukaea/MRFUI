@@ -11,51 +11,24 @@ export interface FilterDef {
 	key: string;
 	label: string;
 	kind: "text" | "date" | "select";
-	/** Shown in the always-visible row rather than under "More filters". */
-	primary?: boolean;
 	placeholder?: string;
 	options?: FilterOption[];
 }
 
-const YES_NO: FilterOption[] = [
-	{ value: "true", label: "Yes" },
-	{ value: "false", label: "No" },
+/** Filters shown in the search bar. */
+export const FILTERS: FilterDef[] = [
+	{ key: "jobId", label: "Job ID", kind: "text", placeholder: "e.g. 12345" },
+	{ key: "seid", label: "SEID", kind: "text", placeholder: "e.g. SE-001" },
+	{ key: "bookingStartFrom", label: "Start date from", kind: "date" },
+	{ key: "bookingStartTo", label: "Start date to", kind: "date" },
 ];
 
-export const FILTERS: FilterDef[] = [
-	{ key: "jobId", label: "Job ID", kind: "text", primary: true, placeholder: "e.g. 12345" },
-	{ key: "seid", label: "SEID", kind: "text", primary: true, placeholder: "e.g. SE-001" },
-	{ key: "bookingStartFrom", label: "Start date from", kind: "date", primary: true },
-	{ key: "bookingStartTo", label: "Start date to", kind: "date", primary: true },
-
-	{ key: "sessionId", label: "Session ID", kind: "text" },
-	{ key: "sampleId", label: "Sample ID", kind: "text" },
-	{ key: "splitSampleId", label: "Split sample ID", kind: "text" },
-	{ key: "seidDescription", label: "SEID description", kind: "text" },
-	{ key: "scientificSupport", label: "Scientific support", kind: "text", placeholder: "Name or email" },
-	{ key: "internalUser", label: "Internal user", kind: "text", placeholder: "Name or email" },
-	{ key: "externalUser", label: "External user", kind: "text", placeholder: "Name or email" },
-	{ key: "labId", label: "Lab ID", kind: "text" },
-	{ key: "labLocation", label: "Lab location", kind: "text" },
-	{ key: "workCategory", label: "Work category", kind: "text" },
-	{ key: "status", label: "Status", kind: "text" },
-	{ key: "notes", label: "Notes", kind: "text" },
-	{ key: "bookingEndFrom", label: "End date from", kind: "date" },
-	{ key: "bookingEndTo", label: "End date to", kind: "date" },
-	{
-		key: "stage",
-		label: "Stage",
-		kind: "select",
-		options: [
-			{ value: "Initial", label: "Initial" },
-			{ value: "Sync", label: "Sync" },
-			{ value: "Ingest", label: "Ingest" },
-		],
-	},
-	{ key: "tritium", label: "Tritium", kind: "select", options: YES_NO },
-	{ key: "beryllium", label: "Beryllium", kind: "select", options: YES_NO },
-	{ key: "betaGamma", label: "Beta/Gamma", kind: "select", options: YES_NO },
-	{ key: "sampleSplit", label: "Sample split", kind: "select", options: YES_NO },
+/**
+ * Not offered in the search bar, but still sent to the backend: the bookings
+ * page narrows the "My Bookings" view by the signed-in user's email.
+ */
+const HIDDEN_FILTERS: FilterDef[] = [
+	{ key: "scientificSupport", label: "Scientific support", kind: "text" },
 ];
 
 export const FILTER_KEYS = FILTERS.map((f) => f.key);
@@ -65,7 +38,7 @@ export type BookingFilters = Record<string, string>;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const FILTERS_BY_KEY = new Map(FILTERS.map((f) => [f.key, f]));
+const FILTERS_BY_KEY = new Map([...FILTERS, ...HIDDEN_FILTERS].map((f) => [f.key, f]));
 
 /** Read valid, non-empty filters from page URL query parameters. */
 export function readFilters(params: URLSearchParams): BookingFilters {

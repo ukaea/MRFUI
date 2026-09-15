@@ -1,4 +1,5 @@
 <script lang="ts">
+	import BookingSearch from "$lib/components/booking-search.svelte";
 	import DataTable from "$lib/components/data-table.svelte";
 	import { Button } from "$lib/components/ui/button/index.js";
 	import Input from "$lib/components/ui/input/input.svelte";
@@ -6,11 +7,8 @@
 	import * as Card from "$lib/components/ui/card/index.js";
 	import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
 	import LoaderIcon from "@tabler/icons-svelte/icons/loader-2";
-	import SearchIcon from "@tabler/icons-svelte/icons/search";
 	import TrashIcon from "@tabler/icons-svelte/icons/trash";
-	import XIcon from "@tabler/icons-svelte/icons/x";
 	import { enhance } from "$app/forms";
-	import { goto } from "$app/navigation";
 
 	let { data } = $props();
 
@@ -18,21 +16,6 @@
 	let deleteMessage = $state("");
 	let syncing = $state(false);
 	let syncMessage = $state("");
-	let searchValue = $state(data.search ?? "");
-
-	function submitSearch() {
-		const trimmed = searchValue.trim();
-		if (trimmed) {
-			goto(`/admin?search=${encodeURIComponent(trimmed)}`);
-		} else {
-			goto("/admin");
-		}
-	}
-
-	function clearSearch() {
-		searchValue = "";
-		goto("/admin");
-	}
 </script>
 
 <div class="h-full flex-1 flex-col py-4 sm:py-6 md:flex md:py-8">
@@ -43,78 +26,53 @@
 		</p>
 	</div>
 
-	<div class="flex items-center justify-between px-4 lg:px-6">
-		<div class="flex items-center gap-2">
-			<div class="relative w-48">
-				<SearchIcon class="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
-				<Input
-					type="text"
-					placeholder="Search by Job ID..."
-					class="pl-9 pr-9"
-					bind:value={searchValue}
-					onkeydown={(e: KeyboardEvent) => {
-						if (e.key === "Enter") {
-							e.preventDefault();
-							submitSearch();
-						}
-					}}
-				/>
-				{#if searchValue}
-					<button
-						type="button"
-						class="text-muted-foreground hover:text-foreground absolute right-2 top-1/2 -translate-y-1/2"
-						onclick={clearSearch}
-					>
-						<XIcon class="size-4" />
-					</button>
+	<BookingSearch filters={data.filters}>
+		{#snippet actions()}
+			<div class="flex items-center gap-3">
+				{#if deleteMessage}
+					<span class="text-muted-foreground text-sm">{deleteMessage}</span>
 				{/if}
-			</div>
-			<Button variant="outline" onclick={submitSearch}>Search</Button>
-		</div>
-		<div class="flex items-center gap-3">
-			{#if deleteMessage}
-				<span class="text-muted-foreground text-sm">{deleteMessage}</span>
-			{/if}
-			<form
-				method="POST"
-				action="?/deleteAll"
-				use:enhance={() => {
-					deletingAll = true;
-					deleteMessage = "";
-					return async ({ result, update }) => {
-						deletingAll = false;
-						if (result.type === "success") {
-							deleteMessage = "All bookings deleted";
-							await update();
-						} else if (result.type === "failure" && result.data) {
-							deleteMessage = result.data.error as string;
-						} else {
-							deleteMessage = "Delete failed";
-						}
-					};
-				}}
-			>
-				<Button
-					type="submit"
-					variant="destructive"
-					disabled={deletingAll}
-					onclick={(e: MouseEvent) => {
-						if (!confirm("Are you sure you want to delete ALL bookings? This cannot be undone.")) {
-							e.preventDefault();
-						}
+				<form
+					method="POST"
+					action="?/deleteAll"
+					use:enhance={() => {
+						deletingAll = true;
+						deleteMessage = "";
+						return async ({ result, update }) => {
+							deletingAll = false;
+							if (result.type === "success") {
+								deleteMessage = "All bookings deleted";
+								await update();
+							} else if (result.type === "failure" && result.data) {
+								deleteMessage = result.data.error as string;
+							} else {
+								deleteMessage = "Delete failed";
+							}
+						};
 					}}
 				>
-					{#if deletingAll}
-						<LoaderIcon class="size-4 animate-spin" />
-						Deleting...
-					{:else}
-						<TrashIcon class="size-4" />
-						Delete All Bookings
-					{/if}
-				</Button>
-			</form>
-		</div>
-	</div>
+					<Button
+						type="submit"
+						variant="destructive"
+						disabled={deletingAll}
+						onclick={(e: MouseEvent) => {
+							if (!confirm("Are you sure you want to delete ALL bookings? This cannot be undone.")) {
+								e.preventDefault();
+							}
+						}}
+					>
+						{#if deletingAll}
+							<LoaderIcon class="size-4 animate-spin" />
+							Deleting...
+						{:else}
+							<TrashIcon class="size-4" />
+							Delete All Bookings
+						{/if}
+					</Button>
+				</form>
+			</div>
+		{/snippet}
+	</BookingSearch>
 
 	<!-- Admin Sync Section -->
 	<div class="px-4 pt-4 lg:px-6">

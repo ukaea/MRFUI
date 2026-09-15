@@ -141,6 +141,7 @@
 	import ChevronsRightIcon from "@tabler/icons-svelte/icons/chevrons-right";
 	import { CSS } from "@dnd-kit-svelte/utilities";
 	import { goto } from "$app/navigation";
+	import { page } from "$app/state";
 
 	interface ServerPagination {
 		page: number;
@@ -154,7 +155,8 @@
 		serverPagination,
 		basePath = "/bookings",
 	}: { data: MRFSchema[]; serverPagination: ServerPagination; basePath?: string } = $props();
-	let pagination = $state<PaginationState>({
+	// Derived so a new search (which resets to page 1) is reflected in the pager
+	let pagination = $derived<PaginationState>({
 		pageIndex: serverPagination.page - 1,
 		pageSize: serverPagination.pageSize,
 	});
@@ -176,7 +178,8 @@
 	);
 
 	function navigateToPage(pageIndex: number, pageSize: number) {
-		const params = new URLSearchParams();
+		// Keep existing query params (search filters, view) when paging
+		const params = new URLSearchParams(page.url.searchParams);
 		params.set("page", String(pageIndex + 1));
 		params.set("page_size", String(pageSize));
 		goto(`${basePath}?${params.toString()}`);

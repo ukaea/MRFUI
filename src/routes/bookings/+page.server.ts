@@ -1,64 +1,40 @@
 // src/routes/bookings/+page.server.ts
 import type { PageServerLoad } from "./$types";
-import type { MRFSchema } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
-import { error } from "@sveltejs/kit";
-
-function bearer(token: string | null): Record<string, string> {
-	return token ? { Authorization: `Bearer ${token}` } : {};
-}
+import { readFilters } from "$lib/booking-filters";
+import { searchBookings } from "$lib/server/bookings";
 
 export const load: PageServerLoad = async ({ url, locals }) => {
-	const backendUrl = env.MRF_BACKEND_URL;
-	if (!backendUrl) {
-		throw error(500, "MRF_BACKEND_URL is not configured");
-	}
-
-	const search = url.searchParams.get("search") || "";
+	const filters = readFilters(url.searchParams);
 	const view = url.searchParams.get("view") || "mine";
 	const page = Number(url.searchParams.get("page")) || 1;
 	const pageSize = Number(url.searchParams.get("page_size")) || 10;
 
-	const auth = bearer(locals.accessToken);
-	let response: Response;
-
-	if (search) {
-		response = await fetch(
-			`${backendUrl}/bookings/search?key=jobId&value=${encodeURIComponent(search)}`,
-			{ headers: auth },
-		);
-	} else if (view === "mine") {
-		// Fetch all bookings so the client can filter by user email
-		response = await fetch(
-			`${backendUrl}/bookings?page=1&page_size=1000`,
-			{ headers: auth },
-		);
-	} else {
-		response = await fetch(
-			`${backendUrl}/bookings?page=${page}&page_size=${pageSize}`,
-			{ headers: auth },
-		);
+	if (view === "mine") {
+		// The page filters these to bookings where the user is scientific support
+		// (exact email match), so fetch them unpaginated. Narrowing by email here
+		// keeps the result set small; the client does the exact match.
+		const email = env.AUTHN_ENABLE !== "false" ? locals.user?.email : undefined;
+		const { bookings } = await searchBookings({
+			token: locals.accessToken,
+			filters: email && !filters.scientificSupport ? { ...filters, scientificSupport: email } : filters,
+			page: 1,
+			pageSize: 1000,
+		});
+		return {
+			bookings,
+			filters,
+			view,
+			pagination: { page: 1, pageSize: bookings.length || pageSize, total: bookings.length, totalPages: 1 },
+		};
 	}
 
-	if (!response.ok) {
-		throw error(response.status, "Failed to fetch bookings");
-	}
+	const { bookings, pagination } = await searchBookings({
+		token: locals.accessToken,
+		filters,
+		page,
+		pageSize,
+	});
 
-	const result = await response.json();
-	const bookings: MRFSchema[] = search ? result : result.items;
-	const isUnpaginated = search || view === "mine";
-
-	return {
-		bookings,
-		search,
-		view,
-		pagination: isUnpaginated
-			? { page: 1, pageSize: bookings.length || pageSize, total: bookings.length, totalPages: 1 }
-			: {
-					page,
-					pageSize,
-					total: result.total as number,
-					totalPages: result.total_pages as number,
-				},
-	};
+	return { bookings, filters, view, pagination };
 };

@@ -124,6 +124,7 @@
 	let isSyncing = $derived(sync?.enabled === true);
 	let changingSync = $state(false);
 	let syncMessage = $state("");
+	let createFoldersOpen = $state(false);
 
 	$effect(() => {
 		sync = data.sync;
@@ -877,80 +878,83 @@
 						<div class="text-sm text-green-600">{stageActionSuccess}</div>
 					{/if}
 
-					<div class="space-y-2">
-						<p class="font-medium text-sm">Create the directory structure for this booking</p>
-						<div class="flex items-center gap-3">
-						<form
-							method="POST"
-							action="?/createFolders&uuid={form.bookingUUID}"
-							use:enhance={() => {
-								creatingFolders = true;
-								createFoldersResult = "idle";
-								createFoldersMessage = "";
-								return async ({ result }) => {
-									creatingFolders = false;
-									if (result.type === "success") {
-										createFoldersResult = "success";
-										createFoldersMessage = "Folders created successfully";
-									} else if (result.type === "failure" && result.data) {
-										createFoldersResult = "error";
-										createFoldersMessage = result.data.error as string;
-										setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
-									} else {
-										createFoldersResult = "error";
-										createFoldersMessage = "Failed to create folders";
-										setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
-									}
-								};
-							}}
-						>
-							<Button
-								type="submit"
-								disabled={creatingFolders || currentStage !== "Sync"}
-								variant={createFoldersResult === "error" ? "destructive" : createFoldersResult === "success" ? "default" : "outline"}
-								class="w-44 {createFoldersResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
+					<Collapsible.Root bind:open={createFoldersOpen} class="rounded-lg border">
+						<Collapsible.Trigger class="flex w-full items-center justify-between p-3 text-sm font-medium hover:bg-accent/50 rounded-lg transition-colors">
+							<span>Optional: Create folders</span>
+							<span class="text-muted-foreground transition-transform duration-200" style:transform={createFoldersOpen ? "rotate(180deg)" : "rotate(0deg)"}>
+								<ChevronDownIcon class="size-4" />
+							</span>
+						</Collapsible.Trigger>
+						<Collapsible.Content class="border-t p-4 space-y-2">
+							<div class="flex items-center gap-3">
+							<form
+								method="POST"
+								action="?/createFolders&uuid={form.bookingUUID}"
+								use:enhance={() => {
+									creatingFolders = true;
+									createFoldersResult = "idle";
+									createFoldersMessage = "";
+									return async ({ result }) => {
+										creatingFolders = false;
+										if (result.type === "success") {
+											createFoldersResult = "success";
+											createFoldersMessage = "Folders created successfully";
+										} else if (result.type === "failure" && result.data) {
+											createFoldersResult = "error";
+											createFoldersMessage = result.data.error as string;
+											setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
+										} else {
+											createFoldersResult = "error";
+											createFoldersMessage = "Failed to create folders";
+											setTimeout(() => { createFoldersResult = "idle"; createFoldersMessage = ""; }, 3000);
+										}
+									};
+								}}
 							>
-								{#if creatingFolders}<LoaderIcon class="size-4 animate-spin" />{/if}
-								Create Folders
-							</Button>
-						</form>
-						{#if createFoldersMessage}
-							<span class={createFoldersResult === "success" ? "text-sm text-green-600" : "text-sm text-destructive"}>{createFoldersMessage}</span>
-						{/if}
-						</div>
-						<div class="bg-muted/50 rounded-md border px-4 py-3 font-mono text-sm space-y-1">
-							<div class="flex items-center gap-1.5">
-								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
-								<span>MRF</span>
-								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+								<Button
+									type="submit"
+									disabled={creatingFolders || currentStage !== "Sync"}
+									variant={createFoldersResult === "error" ? "destructive" : createFoldersResult === "success" ? "default" : "outline"}
+									class="w-44 {createFoldersResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
+								>
+									{#if creatingFolders}<LoaderIcon class="size-4 animate-spin" />{/if}
+									Create Folders
+								</Button>
+							</form>
+							{#if createFoldersMessage}
+								<span class={createFoldersResult === "success" ? "text-sm text-green-600" : "text-sm text-destructive"}>{createFoldersMessage}</span>
+							{/if}
 							</div>
-							<div class="flex items-center gap-1.5 pl-5">
-								<span class="text-muted-foreground select-none">└─</span>
-								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
-								<span>{form.jobId}</span>
-								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+							<div class="bg-muted/50 rounded-md border px-4 py-3 font-mono text-sm space-y-1">
+								<div class="flex items-center gap-1.5">
+									<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+									<span>MRF</span>
+									{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+								</div>
+								<div class="flex items-center gap-1.5 pl-5">
+									<span class="text-muted-foreground select-none">└─</span>
+									<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+									<span>{form.jobId}</span>
+									{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+								</div>
+								<div class="flex items-center gap-1.5 pl-10">
+									<span class="text-muted-foreground select-none">└─</span>
+									<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
+									<span>{form.seid}</span>
+									{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+								</div>
+								<div class="flex items-center gap-1.5 pl-16">
+									<span class="text-muted-foreground select-none">└─</span>
+									<FolderIcon class="size-4 text-yellow-500 shrink-0" />
+									<span>{form.sessionId}</span>
+									{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
+								</div>
 							</div>
-							<div class="flex items-center gap-1.5 pl-10">
-								<span class="text-muted-foreground select-none">└─</span>
-								<FolderOpenIcon class="size-4 text-yellow-500 shrink-0" />
-								<span>{form.seid}</span>
-								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
-							</div>
-							<div class="flex items-center gap-1.5 pl-16">
-								<span class="text-muted-foreground select-none">└─</span>
-								<FolderIcon class="size-4 text-yellow-500 shrink-0" />
-								<span>{form.sessionId}</span>
-								{#if createFoldersResult === "success"}<CircleCheckIcon class="size-4 text-green-500 shrink-0" />{/if}
-							</div>
-						</div>
-					</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 
 					<div class="space-y-2 border-t pt-4">
-						<p class="font-medium text-sm">Sync this booking's folder to the destination</p>
-						<p class="text-muted-foreground text-sm">
-							While syncing, new and changed files in this folder are copied to the destination.
-							Stopping the sync keeps the files already copied.
-						</p>
+						<p class="font-medium text-sm">Sync booking</p>
 						<div class="flex items-center gap-3">
 							{#if isSyncing}
 								<form method="POST" action="?/stopSync&uuid={form.bookingUUID}" use:enhance={changeSync}>
@@ -1072,9 +1076,6 @@
 									Back to Initial
 								</Button>
 							</form>
-							{#if isSyncing}
-								<span class="text-muted-foreground text-sm">Stop the sync to return to Initial</span>
-							{/if}
 						</div>
 					{/if}
 				</div>

@@ -9,6 +9,7 @@
 	import { Checkbox } from "$lib/components/ui/checkbox/index.js";
 	import { Collapsible } from "bits-ui";
 	import { enhance, deserialize } from "$app/forms";
+	import type { SubmitFunction } from "@sveltejs/kit";
 	import { invalidateAll } from "$app/navigation";
 	import ArrowLeftIcon from "@tabler/icons-svelte/icons/arrow-left";
 	import LoaderIcon from "@tabler/icons-svelte/icons/loader-2";
@@ -20,9 +21,10 @@
 	import FolderIcon from "@tabler/icons-svelte/icons/folder";
 	import FolderOpenIcon from "@tabler/icons-svelte/icons/folder-open";
 	import CircleCheckIcon from "@tabler/icons-svelte/icons/circle-check";
-	import { Progress } from "$lib/components/ui/progress/index.js";
+	import PlayerPlayIcon from "@tabler/icons-svelte/icons/player-play";
+	import PlayerStopIcon from "@tabler/icons-svelte/icons/player-stop";
 	import { MRFSchema } from "$lib/components/schemas";
-	import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
+	import type { MRFSchema as MRFSchemaType, SyncStatus } from "$lib/components/schemas";
 
 	let { data } = $props();
 
@@ -69,7 +71,7 @@
 	let saveResult = $state<"idle" | "success" | "error">("idle");
 
 	// Stage state
-	const STAGES = ["Initial", "Data Export", "Ingest"] as const;
+	const STAGES = ["Initial", "Sync", "Ingest"] as const;
 	type Stage = (typeof STAGES)[number];
 
 	let currentStage = $derived<Stage>((form.stage as Stage) || "Initial");
@@ -86,7 +88,7 @@
 
 	// Collapsible open states
 	let importedOpen = $state(true);
-	let dataExportOpen = $state(false);
+	let syncOpen = $state(false);
 	let ingestOpen = $state(false);
 
 	// Re-sync form and collapsible states when server data changes (e.g. after stage progression)
@@ -99,7 +101,7 @@
 	$effect(() => {
 		const stage = (data.booking.stage as Stage) || "Initial";
 		importedOpen = stage === "Initial";
-		dataExportOpen = stage === "Data Export";
+		syncOpen = stage === "Sync";
 		ingestOpen = stage === "Ingest";
 	});
 
@@ -110,21 +112,43 @@
 	let creatingFolders = $state(false);
 	let createFoldersResult = $state<"idle" | "success" | "error">("idle");
 	let createFoldersMessage = $state("");
-	let startingTransfer = $state(false);
-	let setupDataExportResult = $state<"idle" | "success" | "error">("idle");
-	let setupDataExportMessage = $state("");
-	let exportStats = $state<Record<string, unknown> | null>(null);
-	let transferring = $state(false);
-	let transferResult = $state<"idle" | "success" | "error">("idle");
-	let transferMessage = $state("");
-	let transferProgress = $state(0);
-	let transferCurrentFile = $state("");
 	let ingesting = $state(false);
 	let ingestStepsComplete = $state(0); // 0 = not started, 1-4 = steps done
 	let ingestDone = $state(false);
 	let ingestCatalogueUrl = $state("");
 	let stageActionError = $state("");
 	let stageActionSuccess = $state("");
+
+	// Sync state, updated from the start/stop result so the page doesn't reload the booking
+	let sync = $state<SyncStatus | null>(data.sync);
+	let isSyncing = $derived(sync?.enabled === true);
+	let changingSync = $state(false);
+	let syncMessage = $state("");
+
+	$effect(() => {
+		sync = data.sync;
+	});
+
+	const changeSync: SubmitFunction = () => {
+		changingSync = true;
+		syncMessage = "";
+		return async ({ result }) => {
+			changingSync = false;
+			if (result.type === "success" && result.data) {
+				sync = (result.data as { sync: SyncStatus }).sync;
+			} else if (result.type === "failure" && result.data) {
+				syncMessage = result.data.error as string;
+				setTimeout(() => { syncMessage = ""; }, 5000);
+			} else {
+				syncMessage = "Failed to change sync";
+				setTimeout(() => { syncMessage = ""; }, 5000);
+			}
+		};
+	};
+
+	function formatDateTime(isoString: string): string {
+		return new Date(isoString).toLocaleString();
+	}
 
 	// Helper to convert datetime-local input value to ISO string
 	function toDateTimeLocal(isoString: string): string {
@@ -733,7 +757,7 @@
 							};
 						}}
 					>
-						<input type="hidden" name="stage" value="Data Export" />
+						<input type="hidden" name="stage" value="Sync" />
 						<Button
 							type="submit"
 							disabled={progressingStage || isDirty}
@@ -748,7 +772,7 @@
 							{:else if progressStageResult === "error"}
 								Failed
 							{:else}
-								Progress to Data Export
+								Progress to Sync
 							{/if}
 						</Button>
 					</form>
@@ -824,23 +848,26 @@
 		</Collapsible.Content>
 	</Collapsible.Root>
 
-	<!-- Stage 2: Data Export -->
-	<Collapsible.Root bind:open={dataExportOpen} class="rounded-xl border">
+	<!-- Stage 2: Sync -->
+	<Collapsible.Root bind:open={syncOpen} class="rounded-xl border">
 		<Collapsible.Trigger class="flex w-full items-center justify-between p-4 text-lg font-semibold hover:bg-accent/50 rounded-xl transition-colors">
 			<div class="flex items-center gap-3">
-				<Badge variant={currentStage === "Data Export" ? "default" : stageIndex(currentStage) > 1 ? "secondary" : "outline"}>2</Badge>
-				<span>Data Export</span>
+				<Badge variant={currentStage === "Sync" ? "default" : stageIndex(currentStage) > 1 ? "secondary" : "outline"}>2</Badge>
+				<span>Sync</span>
+				{#if isSyncing}
+					<Badge variant="secondary" class="text-xs">Syncing</Badge>
+				{/if}
 				{#if stageIndex(currentStage) > 1}
 					<Badge variant="outline" class="text-xs">Completed</Badge>
 				{/if}
 			</div>
-			<span class="text-muted-foreground transition-transform duration-200" style:transform={dataExportOpen ? "rotate(180deg)" : "rotate(0deg)"}>
+			<span class="text-muted-foreground transition-transform duration-200" style:transform={syncOpen ? "rotate(180deg)" : "rotate(0deg)"}>
 				<ChevronDownIcon class="size-5" />
 			</span>
 		</Collapsible.Trigger>
 		<Collapsible.Content class="border-t p-6">
 			{#if stageIndex(currentStage) < 1}
-				<p class="text-muted-foreground text-sm">Complete the Initial stage before accessing Data Export.</p>
+				<p class="text-muted-foreground text-sm">Complete the Initial stage before accessing Sync.</p>
 			{:else}
 				<div class="space-y-4">
 					{#if stageActionError}
@@ -879,7 +906,7 @@
 						>
 							<Button
 								type="submit"
-								disabled={creatingFolders || currentStage !== "Data Export"}
+								disabled={creatingFolders || currentStage !== "Sync"}
 								variant={createFoldersResult === "error" ? "destructive" : createFoldersResult === "success" ? "default" : "outline"}
 								class="w-44 {createFoldersResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
 							>
@@ -919,154 +946,63 @@
 					</div>
 
 					<div class="space-y-2 border-t pt-4">
-						<p class="font-medium text-sm">Configure data export for this booking</p>
+						<p class="font-medium text-sm">Sync this booking's folder to the destination</p>
+						<p class="text-muted-foreground text-sm">
+							While syncing, new and changed files in this folder are copied to the destination.
+							Stopping the sync keeps the files already copied.
+						</p>
 						<div class="flex items-center gap-3">
-							<form
-								method="POST"
-								action="?/setupDataExport&uuid={form.bookingUUID}"
-								use:enhance={() => {
-									startingTransfer = true;
-									setupDataExportResult = "idle";
-									setupDataExportMessage = "";
-									exportStats = null;
-									return async ({ result }) => {
-										startingTransfer = false;
-										if (result.type === "success" && result.data) {
-											setupDataExportResult = "success";
-											setupDataExportMessage = "Data export setup successfully";
-											exportStats = (result.data as { stats: Record<string, unknown> }).stats ?? null;
-										} else if (result.type === "failure" && result.data) {
-											setupDataExportResult = "error";
-											setupDataExportMessage = result.data.error as string;
-											setTimeout(() => { setupDataExportResult = "idle"; setupDataExportMessage = ""; }, 3000);
-										} else {
-											setupDataExportResult = "error";
-											setupDataExportMessage = "Failed to setup data export";
-											setTimeout(() => { setupDataExportResult = "idle"; setupDataExportMessage = ""; }, 3000);
-										}
-									};
-								}}
-							>
-								<Button
-									type="submit"
-									disabled={startingTransfer || currentStage !== "Data Export"}
-									variant={setupDataExportResult === "error" ? "destructive" : setupDataExportResult === "success" ? "default" : "outline"}
-									class="w-44 {setupDataExportResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
-								>
-									{#if startingTransfer}<LoaderIcon class="size-4 animate-spin" />{/if}
-									Setup Data Export
-								</Button>
-							</form>
-							{#if setupDataExportMessage && setupDataExportResult === "error"}
-								<span class="text-sm text-destructive">{setupDataExportMessage}</span>
-							{/if}
-						</div>
-						{#if exportStats}
-							<div class="bg-muted/50 rounded-md border px-4 py-3 text-sm flex gap-6">
-								<div class="space-y-1 shrink-0">
-									<div>
-										<span class="text-muted-foreground">Total Number of Files:</span> <span class="font-medium">{exportStats.files}</span>
-									</div>
-									<div>
-										<span class="text-muted-foreground">Total Size:</span> <span class="font-medium">{exportStats.size_mb} MB</span>
-									</div>
-								</div>
-								{#if (exportStats.fileNames as string[])?.length}
-									{@const allFiles = exportStats.fileNames as string[]}
-									{@const MAX = 14}
-									{@const hasMore = allFiles.length > MAX}
-									{@const displayed = hasMore ? [...allFiles.slice(0, MAX), "…"] : allFiles}
-									<div class="border-l pl-6 min-w-0">
-										<p class="text-muted-foreground mb-1">Files</p>
-										<div class="grid grid-flow-col grid-rows-5 gap-x-8 gap-y-0.5 font-mono">
-											{#each displayed as name}
-												<span class="truncate {name === '…' ? 'text-muted-foreground' : ''}">{name}</span>
-											{/each}
-										</div>
-									</div>
-								{/if}
-							</div>
-							<div class="space-y-2 pt-3">
-								<form
-									method="POST"
-									action="?/transfer&uuid={form.bookingUUID}"
-									use:enhance={() => {
-										transferring = true;
-										transferResult = "idle";
-										transferMessage = "";
-										transferProgress = 0;
-										transferCurrentFile = "";
-										setTimeout(() => { transferProgress = 85; }, 50);
-
-										// Cycle through known filenames while transferring
-										const files = (exportStats?.fileNames as string[] | undefined) ?? [];
-										let fileIdx = 0;
-										let fileInterval: ReturnType<typeof setInterval> | undefined;
-										if (files.length > 0) {
-											transferCurrentFile = files[0];
-											fileInterval = setInterval(() => {
-												fileIdx = (fileIdx + 1) % files.length;
-												transferCurrentFile = files[fileIdx];
-											}, Math.max(200, 3000 / files.length));
-										}
-
-										return async ({ result }) => {
-											await new Promise(resolve => setTimeout(resolve, 3000));
-											clearInterval(fileInterval);
-											transferCurrentFile = "";
-											transferring = false;
-											if (result.type === "success") {
-												transferProgress = 100;
-												transferResult = "success";
-											} else if (result.type === "failure" && result.data) {
-												transferProgress = 100;
-												transferResult = "error";
-												transferMessage = result.data.error as string;
-												setTimeout(() => { transferResult = "idle"; transferProgress = 0; transferMessage = ""; }, 3000);
-											} else {
-												transferProgress = 100;
-												transferResult = "error";
-												transferMessage = "Failed to start transfer";
-												setTimeout(() => { transferResult = "idle"; transferProgress = 0; transferMessage = ""; }, 3000);
-											}
-										};
-									}}
-								>
-									<Button
-										type="submit"
-										disabled={transferring || transferResult === "success" || currentStage !== "Data Export"}
-										variant={transferResult === "error" ? "destructive" : transferResult === "success" ? "default" : "outline"}
-										class="w-44 {transferResult === 'success' ? 'bg-green-600 hover:bg-green-600 text-white' : ''}"
-									>
-										{#if transferring}
+							{#if isSyncing}
+								<form method="POST" action="?/stopSync&uuid={form.bookingUUID}" use:enhance={changeSync}>
+									<Button type="submit" variant="outline" class="w-44" disabled={changingSync || currentStage !== "Sync"}>
+										{#if changingSync}
 											<LoaderIcon class="size-4 animate-spin" />
-											Transferring
-										{:else if transferResult === "success"}
-											Complete
 										{:else}
-											Start Transfer
+											<PlayerStopIcon class="size-4" />
 										{/if}
+										Stop Sync
 									</Button>
 								</form>
-								{#if transferring || transferResult !== "idle"}
-									<Progress
-										value={transferProgress}
-										class="h-3 {transferResult === 'success' ? '[&>[data-slot=progress-indicator]]:bg-green-500' : transferResult === 'error' ? '[&>[data-slot=progress-indicator]]:bg-destructive' : ''}"
-									/>
-								{/if}
-								{#if transferring && transferCurrentFile}
-									<div class="bg-muted/50 rounded-md border px-3 py-2 text-sm font-mono text-muted-foreground truncate">
-										{transferCurrentFile}
-									</div>
-								{/if}
-								{#if transferMessage}
-									<span class="text-sm text-destructive">{transferMessage}</span>
-								{/if}
+							{:else}
+								<form method="POST" action="?/startSync&uuid={form.bookingUUID}" use:enhance={changeSync}>
+									<Button type="submit" class="w-44" disabled={changingSync || currentStage !== "Sync" || !sync?.folder}>
+										{#if changingSync}
+											<LoaderIcon class="size-4 animate-spin" />
+										{:else}
+											<PlayerPlayIcon class="size-4" />
+										{/if}
+										Start Sync
+									</Button>
+								</form>
+							{/if}
+							{#if syncMessage}
+								<span class="text-sm text-destructive">{syncMessage}</span>
+							{/if}
+						</div>
+						<div class="bg-muted/50 rounded-md border px-4 py-3 text-sm space-y-1">
+							<div class="flex items-center gap-2">
+								<span class="text-muted-foreground">Status:</span>
+								<Badge variant={isSyncing ? "default" : "outline"}>{isSyncing ? "Syncing" : "Not syncing"}</Badge>
 							</div>
-						{/if}
+							<div>
+								<span class="text-muted-foreground">Folder:</span>
+								<span class="font-mono">{sync?.folder ?? "Unavailable (booking is missing Job ID, SEID or Session ID)"}</span>
+							</div>
+							{#if isSyncing && sync?.startedAt}
+								<div>
+									<span class="text-muted-foreground">Started:</span>
+									{formatDateTime(sync.startedAt)}{#if sync.updatedBy} by {sync.updatedBy}{/if}
+								</div>
+							{:else if !isSyncing && sync?.stoppedAt}
+								<div>
+									<span class="text-muted-foreground">Stopped:</span>
+									{formatDateTime(sync.stoppedAt)}{#if sync.updatedBy} by {sync.updatedBy}{/if}
+								</div>
+							{/if}
+						</div>
 					</div>
 
-					{#if currentStage === "Data Export"}
+					{#if currentStage === "Sync"}
 						<div class="flex items-center gap-3 border-t pt-4">
 							<form
 								method="POST"
@@ -1132,10 +1068,13 @@
 								}}
 							>
 								<input type="hidden" name="stage" value="Initial" />
-								<Button type="submit" variant="outline" disabled={progressingStage}>
+								<Button type="submit" variant="outline" disabled={progressingStage || isSyncing}>
 									Back to Initial
 								</Button>
 							</form>
+							{#if isSyncing}
+								<span class="text-muted-foreground text-sm">Stop the sync to return to Initial</span>
+							{/if}
 						</div>
 					{/if}
 				</div>
@@ -1267,9 +1206,9 @@
 									};
 								}}
 							>
-								<input type="hidden" name="stage" value="Data Export" />
+								<input type="hidden" name="stage" value="Sync" />
 								<Button type="submit" variant="outline" disabled={progressingStage}>
-									Back to Data Export
+									Back to Sync
 								</Button>
 							</form>
 						</div>

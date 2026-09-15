@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
             // Using the backend total for the "Total" card
             totalCount: pagination.total,
             initial: bookings.filter((b) => b.stage === "Initial").length,
-            dataExport: bookings.filter((b) => b.stage === "Data Export").length,
+            sync: bookings.filter((b) => b.stage === "Sync").length,
             ingest: bookings.filter((b) => b.stage === "Ingest").length,
         },
         bookings // Passing the actual items if you need to render the list too

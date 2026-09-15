@@ -48,7 +48,7 @@ export const FILTERS: FilterDef[] = [
 		kind: "select",
 		options: [
 			{ value: "Initial", label: "Initial" },
-			{ value: "Data Export", label: "Data Export" },
+			{ value: "Sync", label: "Sync" },
 			{ value: "Ingest", label: "Ingest" },
 		],
 	},

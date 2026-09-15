@@ -1,7 +1,7 @@
 <script lang="ts">
     import CalendarIcon from "@tabler/icons-svelte/icons/calendar";
     import ClockIcon from "@tabler/icons-svelte/icons/clock";
-    import FileExportIcon from "@tabler/icons-svelte/icons/file-export";
+    import RefreshIcon from "@tabler/icons-svelte/icons/refresh";
     import DatabaseImportIcon from "@tabler/icons-svelte/icons/database-import";
     import * as Card from "$lib/components/ui/card/index.js";
 
@@ -9,7 +9,7 @@
         stats: {
             totalCount: number;
             initial: number;
-            dataExport: number;
+            sync: number;
             ingest: number;
         };
     }
@@ -52,16 +52,16 @@
 
     <Card.Root class="@container/card">
         <Card.Header>
-            <Card.Description>Data Export</Card.Description>
+            <Card.Description>Sync</Card.Description>
             <Card.Title class="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">
-                {stats.dataExport}
+                {stats.sync}
             </Card.Title>
             <Card.Action>
-                <FileExportIcon class="text-muted-foreground size-5" />
+                <RefreshIcon class="text-muted-foreground size-5" />
             </Card.Action>
         </Card.Header>
         <Card.Footer class="flex-col items-start gap-1.5 text-sm">
-            <div class="text-muted-foreground">Ready for data export</div>
+            <div class="text-muted-foreground">Data folders being synced</div>
         </Card.Footer>
     </Card.Root>
 

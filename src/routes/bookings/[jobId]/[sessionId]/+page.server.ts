@@ -1,9 +1,9 @@
 import { error, fail } from "@sveltejs/kit";
 import type { PageServerLoad, Actions } from "./$types";
 import { MRFSchema } from "$lib/components/schemas";
-import type { MRFSchema as MRFSchemaType } from "$lib/components/schemas";
+import type { MRFSchema as MRFSchemaType, SyncStatus } from "$lib/components/schemas";
 import { env } from "$env/dynamic/private";
-import { writeFile, mkdir, stat, readdir, cp } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import jq from "node-jq";
 
@@ -39,34 +39,39 @@ async function savePayload(uuid: string, suffix: string, data: unknown): Promise
 	await writeFile(join(payloadDir, `${uuid}_${suffix}.json`), JSON.stringify(data, null, 2));
 }
 
-async function getFolderStats(folderPath: string): Promise<{ folders: number; files: number; size_mb: number; fileNames: string[] }> {
-	let folders = 0;
-	let files = 0;
-	let totalBytes = 0;
-	const fileNames: string[] = [];
-
-	async function walk(dir: string) {
-		const entries = await readdir(dir, { withFileTypes: true });
-		for (const entry of entries) {
-			const fullPath = join(dir, entry.name);
-			if (entry.isDirectory()) {
-				folders++;
-				await walk(fullPath);
-			} else if (entry.isFile()) {
-				files++;
-				fileNames.push(entry.name);
-				const info = await stat(fullPath);
-				totalBytes += info.size;
-			}
-		}
-	}
-
-	await walk(folderPath);
-	return { folders, files, size_mb: Math.round(totalBytes / (1024 ** 2) * 10) / 10, fileNames };
-}
-
 function bearer(token: string | null): Record<string, string> {
 	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function fetchSyncStatus(backendUrl: string, uuid: string, token: string | null): Promise<SyncStatus | null> {
+	const response = await fetch(`${backendUrl}/bookings/${uuid}/sync`, { headers: bearer(token) });
+	return response.ok ? await response.json() : null;
+}
+
+async function changeSync(url: URL, locals: App.Locals, action: "start" | "stop") {
+	const backendUrl = env.MRF_BACKEND_URL;
+	if (!backendUrl) {
+		return fail(500, { error: "MRF_BACKEND_URL is not configured" });
+	}
+
+	const uuid = url.searchParams.get("uuid");
+	if (!uuid) {
+		return fail(400, { error: "Missing booking UUID" });
+	}
+
+	const response = await fetch(`${backendUrl}/bookings/${uuid}/sync/${action}`, {
+		method: "POST",
+		headers: bearer(locals.accessToken),
+	});
+
+	if (!response.ok) {
+		const body = await response.json().catch(() => null);
+		const detail = typeof body?.detail === "string" ? body.detail : response.statusText;
+		return fail(response.status, { error: `Failed to ${action} sync: ${detail}` });
+	}
+
+	const sync: SyncStatus = await response.json();
+	return { success: true, sync };
 }
 
 export const load: PageServerLoad = async ({ url, locals }) => {
@@ -80,6 +85,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 		throw error(400, "Missing booking UUID");
 	}
 
+	const sync = fetchSyncStatus(backendUrl, uuid, locals.accessToken);
+
 	// Refresh the booking from SharePoint before returning it
 	const refreshResponse = await fetch(`${backendUrl}/bookings/${uuid}/refresh`, {
 		method: "POST",
@@ -88,7 +95,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	if (refreshResponse.ok) {
 		const booking: MRFSchemaType = await refreshResponse.json();
-		return { booking };
+		return { booking, sync: await sync };
 	}
 
 	// Fall back to reading the existing booking if refresh fails
@@ -101,7 +108,7 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 	const booking: MRFSchemaType = await response.json();
 
-	return { booking };
+	return { booking, sync: await sync };
 };
 
 export const actions: Actions = {
@@ -175,9 +182,9 @@ export const actions: Actions = {
 		const newStage = formData.get("stage") as string;
 
 		const validTransitions: Record<string, string[]> = {
-			"Initial": ["Data Export"],
-			"Data Export": ["Initial", "Ingest"],
-			"Ingest": ["Data Export"],
+			"Initial": ["Sync"],
+			"Sync": ["Initial", "Ingest"],
+			"Ingest": ["Sync"],
 		};
 
 		const auth = bearer(locals.accessToken);
@@ -256,127 +263,9 @@ export const actions: Actions = {
 		return { success: true, ...result };
 	},
 
-	setupDataExport: async ({ url, locals }) => {
-		const backendUrl = env.MRF_BACKEND_URL;
-		if (!backendUrl) {
-			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
-		}
+	startSync: async ({ url, locals }) => changeSync(url, locals, "start"),
 
-		const uuid = url.searchParams.get("uuid");
-		if (!uuid) {
-			return fail(400, { error: "Missing booking UUID" });
-		}
-
-		const auth = bearer(locals.accessToken);
-
-		const bookingResponse = await fetch(`${backendUrl}/bookings/${uuid}`, { headers: auth });
-		if (!bookingResponse.ok) {
-			return fail(bookingResponse.status, { error: "Booking not found" });
-		}
-		const booking = await bookingResponse.json();
-
-		const { jobId, seid, sessionId } = booking;
-		if (!jobId || !seid || !sessionId) {
-			return fail(400, { error: "Booking is missing jobId, seid, or sessionId" });
-		}
-
-		const folderPath = `MRF/${jobId}/${seid}/${sessionId}`;
-
-		if (env.DATA_EXPORT_MOCK === "true") {
-			const rootPath = env.DATA_EXPORT_MOCK_ROOT_PATH;
-			const resolvedPath = rootPath ? join(rootPath, folderPath) : folderPath;
-			try {
-				const stats = await getFolderStats(resolvedPath);
-				return { success: true, stats };
-			} catch {
-				return fail(500, { error: `Failed to read folder: ${resolvedPath}` });
-			}
-		}
-
-		const dataExportUrl = env.DATA_EXPORT_URL;
-		if (!dataExportUrl) {
-			return fail(500, { error: "DATA_EXPORT_URL is not configured" });
-		}
-
-		const response = await fetch(
-			`${dataExportUrl}/stats?path=${encodeURIComponent(folderPath)}`,
-			{ headers: { Accept: "application/json", ...auth } },
-		);
-
-		if (!response.ok) {
-			const text = await response.text();
-			return fail(response.status, { error: `Failed to fetch export stats: ${text}` });
-		}
-
-		const stats = await response.json();
-		return { success: true, stats };
-	},
-
-	transfer: async ({ url, locals }) => {
-		const backendUrl = env.MRF_BACKEND_URL;
-		if (!backendUrl) {
-			return fail(500, { error: "MRF_BACKEND_URL is not configured" });
-		}
-
-		const uuid = url.searchParams.get("uuid");
-		if (!uuid) {
-			return fail(400, { error: "Missing booking UUID" });
-		}
-
-		const auth = bearer(locals.accessToken);
-
-		const bookingResponse = await fetch(`${backendUrl}/bookings/${uuid}`, { headers: auth });
-		if (!bookingResponse.ok) {
-			return fail(bookingResponse.status, { error: "Booking not found" });
-		}
-		const booking = await bookingResponse.json();
-
-		const { jobId, seid, sessionId } = booking;
-		if (!jobId || !seid || !sessionId) {
-			return fail(400, { error: "Booking is missing jobId, seid, or sessionId" });
-		}
-
-		const folderPath = `MRF/${jobId}/${seid}/${sessionId}`;
-		const rootPath = env.DATA_EXPORT_MOCK_ROOT_PATH;
-
-		if (env.DATA_EXPORT_MOCK === "true") {
-			const dest = env.DATA_EXPORT_MOCK_DEST;
-			if (!dest) {
-				return fail(500, { error: "DATA_EXPORT_MOCK_DEST is not configured" });
-			}
-			const source = rootPath ? join(rootPath, folderPath) : folderPath;
-			const destination = rootPath ? join(rootPath, dest) : dest;
-			try {
-				await cp(source, destination, { recursive: true });
-			} catch {
-				return fail(500, { error: `Failed to copy files from ${source} to ${destination}` });
-			}
-			return { success: true, source, destination };
-		}
-
-		const dataExportUrl = env.DATA_EXPORT_URL;
-		if (!dataExportUrl) {
-			return fail(500, { error: "DATA_EXPORT_URL is not configured" });
-		}
-
-		const source = rootPath ? join(rootPath, folderPath) : folderPath;
-		const dest = env.DATA_EXPORT_MOCK_DEST;
-		const destination = dest ? (rootPath ? join(rootPath, dest) : dest) : undefined;
-
-		const response = await fetch(`${dataExportUrl}/transfer`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Accept: "application/json", ...auth },
-			body: JSON.stringify({ source_folder: source, destination_folder: destination }),
-		});
-
-		if (!response.ok) {
-			const text = await response.text();
-			return fail(response.status, { error: `Failed to start transfer: ${text}` });
-		}
-
-		const result = await response.json();
-		return { success: true, ...result };
-	},
+	stopSync: async ({ url, locals }) => changeSync(url, locals, "stop"),
 
 	processIngest: async ({ request, url }) => {
 		const uuid = url.searchParams.get("uuid");

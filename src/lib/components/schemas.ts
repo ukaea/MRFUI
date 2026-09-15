@@ -33,10 +33,21 @@ export const MRFSchema = z.object({
 	spCreated: z.string().optional(),
 	dbCreatedAt: z.string().optional(),
 	dbUpdatedAt: z.string().optional(),
-	stage: z.enum(["Initial", "Data Export", "Ingest"]).default("Initial"),
+	stage: z.enum(["Initial", "Sync", "Ingest"]).default("Initial"),
 });
 
 export type MRFSchema = z.infer<typeof MRFSchema>;
 
 // Alias for backwards compatibility
 export type Schema = MRFSchema;
+
+/** Whether NiFi is syncing a booking's folder, as returned by the backend. */
+export interface SyncStatus {
+	bookingUUID: string;
+	/** Relative to the sync source root, e.g. "MRF/12345/0084/67890" */
+	folder: string | null;
+	enabled: boolean;
+	startedAt: string | null;
+	stoppedAt: string | null;
+	updatedBy: string | null;
+}

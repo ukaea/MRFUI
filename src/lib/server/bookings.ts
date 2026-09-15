@@ -7,6 +7,17 @@ export function bearer(token: string | null): Record<string, string> {
 	return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** FastAPI sends 400s as a string and 422 validation errors as a list. */
+function formatDetail(detail: unknown): string {
+	if (typeof detail === "string") return detail;
+	if (Array.isArray(detail)) {
+		return detail
+			.map((d) => `${(d?.loc ?? []).filter((l: unknown) => l !== "query").join(".")} ${d?.msg ?? ""}`.trim())
+			.join("; ");
+	}
+	return "unknown error";
+}
+
 /**
  * Fetch a page of bookings matching `filters` from the backend search endpoint.
  * With no filters this returns every booking, newest booking start first.
@@ -39,8 +50,7 @@ export async function searchBookings({
 		// 400/422 carry a useful validation message (e.g. a malformed filter value)
 		if (response.status === 400 || response.status === 422) {
 			const body = await response.json().catch(() => null);
-			const detail = typeof body?.detail === "string" ? body.detail : "Invalid search filters";
-			throw error(400, detail);
+			throw error(400, `Invalid search filters: ${formatDetail(body?.detail)}`);
 		}
 		throw error(response.status, "Failed to fetch bookings");
 	}

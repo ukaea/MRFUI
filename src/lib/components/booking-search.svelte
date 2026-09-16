@@ -24,7 +24,7 @@
 	}: {
 		/** Filters currently applied (from the page URL). */
 		filters: BookingFilters;
-		/** Extra controls rendered in their own row, right-aligned. */
+		/** Extra controls rendered in their own row above the filters. */
 		actions?: Snippet;
 	} = $props();
 
@@ -76,6 +76,12 @@
 <!-- The form wraps the inputs and the Search button only, so `actions` can
      contain forms of its own. -->
 <div class="flex flex-col gap-3 px-4 lg:px-6">
+	{#if actions}
+		<div class="flex flex-wrap items-center gap-2">
+			{@render actions()}
+		</div>
+	{/if}
+
 	<form class="flex flex-wrap items-end gap-3" onsubmit={submit}>
 		{#each FILTERS as def (def.key)}
 			{@render field(def)}
@@ -90,12 +96,6 @@
 			{/if}
 		</div>
 	</form>
-
-	{#if actions}
-		<div class="flex flex-wrap items-center justify-end gap-2">
-			{@render actions()}
-		</div>
-	{/if}
 
 	{#if activeEntries.length > 0}
 		<div class="flex flex-wrap items-center gap-2" aria-label="Active filters">
@@ -118,9 +118,9 @@
 
 {#snippet field(def: FilterDef)}
 	{@const id = `filter-${def.key}`}
-	<!-- Dates need the extra room for the placeholder and the picker icon. -->
-	{@const width = def.kind === "date" ? "w-40" : "w-36"}
-	<div class="flex flex-col gap-1.5 {width}">
+	<!-- Fields share the row evenly; the min width keeps a date readable before
+	     the row wraps on narrow screens. -->
+	<div class="flex min-w-36 flex-1 flex-col gap-1.5">
 		<Label for={id} class="text-muted-foreground text-xs">{def.label}</Label>
 		{#if def.kind === "select" && def.options}
 			<Select.Root

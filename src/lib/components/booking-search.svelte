@@ -24,13 +24,11 @@
 	}: {
 		/** Filters currently applied (from the page URL). */
 		filters: BookingFilters;
-		/** Extra controls rendered at the right of the button row. */
+		/** Extra controls rendered in their own row, right-aligned. */
 		actions?: Snippet;
 	} = $props();
 
 	const ANY = "__any";
-	const uid = $props.id();
-	const formId = `booking-search-${uid}`;
 
 	// Draft values being edited; reset whenever the applied filters change
 	// (e.g. after navigating, removing a chip, or using the back button).
@@ -75,20 +73,15 @@
 	}
 </script>
 
-<!-- The form only wraps the inputs so `actions` can contain forms of its own;
-     the Search button joins it through the `form` attribute. -->
+<!-- The form wraps the inputs and the Search button only, so `actions` can
+     contain forms of its own. -->
 <div class="flex flex-col gap-3 px-4 lg:px-6">
-	<form id={formId} class="flex flex-col gap-3" onsubmit={submit}>
-		<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-			{#each FILTERS as def (def.key)}
-				{@render field(def)}
-			{/each}
-		</div>
-	</form>
-
-	<div class="flex flex-wrap items-center justify-between gap-2">
+	<form class="flex flex-wrap items-end gap-3" onsubmit={submit}>
+		{#each FILTERS as def (def.key)}
+			{@render field(def)}
+		{/each}
 		<div class="flex flex-wrap items-center gap-2">
-			<Button type="submit" form={formId}>
+			<Button type="submit">
 				<SearchIcon class="size-4" />
 				Search
 			</Button>
@@ -96,8 +89,13 @@
 				<Button type="button" variant="ghost" onclick={clearAll}>Clear all</Button>
 			{/if}
 		</div>
-		{@render actions?.()}
-	</div>
+	</form>
+
+	{#if actions}
+		<div class="flex flex-wrap items-center justify-end gap-2">
+			{@render actions()}
+		</div>
+	{/if}
 
 	{#if activeEntries.length > 0}
 		<div class="flex flex-wrap items-center gap-2" aria-label="Active filters">
@@ -120,7 +118,9 @@
 
 {#snippet field(def: FilterDef)}
 	{@const id = `filter-${def.key}`}
-	<div class="flex flex-col gap-1.5">
+	<!-- Dates need the extra room for the placeholder and the picker icon. -->
+	{@const width = def.kind === "date" ? "w-40" : "w-36"}
+	<div class="flex flex-col gap-1.5 {width}">
 		<Label for={id} class="text-muted-foreground text-xs">{def.label}</Label>
 		{#if def.kind === "select" && def.options}
 			<Select.Root

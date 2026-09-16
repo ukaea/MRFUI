@@ -19,6 +19,16 @@ export interface FilterDef {
 export const FILTERS: FilterDef[] = [
 	{ key: "jobId", label: "Job ID", kind: "text", placeholder: "e.g. 12345" },
 	{ key: "seid", label: "SEID", kind: "text", placeholder: "e.g. SE-001" },
+	{
+		key: "stage",
+		label: "Stage",
+		kind: "select",
+		options: [
+			{ value: "Initial", label: "Initial" },
+			{ value: "Sync", label: "Sync" },
+			{ value: "Ingest", label: "Ingest" },
+		],
+	},
 	{ key: "bookingStartFrom", label: "Start date from", kind: "date" },
 	{ key: "bookingStartTo", label: "Start date to", kind: "date" },
 ];

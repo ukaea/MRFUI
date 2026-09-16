@@ -18,6 +18,11 @@
 			cell: ({ row }) => row.original.sessionId,
 		},
 		{
+			accessorKey: "stage",
+			header: ({ column }) => renderSnippet(SortableHeader, { label: "Stage", column }),
+			cell: ({ row }) => row.original.stage || "Initial",
+		},
+		{
 			accessorKey: "seid",
 			header: ({ column }) => renderSnippet(SortableHeader, { label: "SEID", column }),
 			cell: ({ row }) => row.original.seid,
@@ -77,11 +82,6 @@
 			accessorKey: "institution",
 			header: ({ column }) => renderSnippet(SortableHeader, { label: "Institution", column }),
 			cell: ({ row }) => row.original.institution || "—",
-		},
-		{
-			accessorKey: "stage",
-			header: ({ column }) => renderSnippet(SortableHeader, { label: "Stage", column }),
-			cell: ({ row }) => row.original.stage || "Initial",
 		},
 	];
 </script>
